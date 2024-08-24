@@ -1,0 +1,20 @@
+{
+  "name": "aprrove-nbt-front-bot-js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "nodemon index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "dependencies": {
+    "axios": "^1.7.5",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.29.0",
+    "nodemon": "^3.1.4",
+    "uuid": "^10.0.0"
+  }
+}
