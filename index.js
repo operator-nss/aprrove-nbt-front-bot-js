@@ -1,12 +1,13 @@
 import {Bot, InlineKeyboard} from "grammy";
 import dotenv from "dotenv";
 import {checkMr, getEveningMessage, getRandomElements, helpMessage, startMessage} from "./helpers.js";
-import {adminIds, userList} from "./constants.js";
+import {userList} from "./constants.js";
 
 dotenv.config();
 
 const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const GITLAB_TOKEN = process.env.GITLAB_ACCESS_TOKEN; // GitLab Access Token
+const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
 
 // Создаем бота
 const bot = new Bot(TOKEN);
@@ -41,7 +42,7 @@ const isAdmin = async ctx => {
 	const userId = ctx.from.id;
 	
 	// Проверка, есть ли пользователь в списке adminIds (личные сообщения)
-	if (adminIds.includes(userId)) {
+	if (ADMINS_IDS.includes(userId)) {
 		return true;
 	}
 	

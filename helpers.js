@@ -17,7 +17,6 @@ export const getRandomElements = (array, n) => {
 			taken[randomIndex] = true;
 		}
 	}
-	
 	return result;
 };
 
