@@ -1,6 +1,6 @@
 import {Bot, InlineKeyboard} from "grammy";
 import dotenv from "dotenv";
-import {checkMr, getRandomElements, helpMessage, startMessage} from "./helpers.js";
+import {checkMr, getEveningMessage, getRandomElements, helpMessage, startMessage} from "./helpers.js";
 import {adminIds, userList} from "./constants.js";
 
 dotenv.config();
@@ -23,7 +23,7 @@ const excludedUsers = [];
 bot.api.setMyCommands([
 	{command: 'start', description: 'Запуск бота'},
 	{command: 'help', description: 'WTF'}
-], { scope: { type: 'all_private_chats' } });
+], {scope: {type: 'all_private_chats'}});
 
 // Обработка команды /start
 bot.command('start', async (ctx) => await startBot(ctx));
@@ -99,14 +99,20 @@ async function assignReviewers(ctx, message, authorNick) {
 	console.log('availableReviewers', availableReviewers);
 	
 	if (availableReviewers.length === 0) {
-		await ctx.reply(`Нет активных ревьюверов.🥴`, {reply_to_message_id: ctx.message.message_id});
+		await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴`), {
+			reply_to_message_id: ctx.message.message_id,
+			disable_web_page_preview: true
+		});
 		return;
 	}
 	
 	if (availableReviewers.length === 1) {
 		const reviewer = getRandomElements(availableReviewers, 1);
 		console.log('reviewer', reviewer);
-		await ctx.reply(`Назначен единственный доступный ревьювер: ${reviewer[0].messengerNick}. Требуется еще 1 апрувер.😳`, {reply_to_message_id: ctx.message.message_id});
+		await ctx.reply(getEveningMessage(`Назначен единственный доступный ревьювер: ${reviewer[0].messengerNick}. Требуется еще 1 апрувер.😳`), {
+			reply_to_message_id: ctx.message.message_id,
+			disable_web_page_preview: true
+		});
 		return;
 	}
 	
@@ -114,7 +120,11 @@ async function assignReviewers(ctx, message, authorNick) {
 	const reviewers = getRandomElements(availableReviewers, 2);
 	const reviewerMentions = reviewers.map(reviewer => reviewer.messengerNick).join(' и ');
 	
-	await ctx.reply(`Назначены ревьюверы для MR: ${reviewerMentions}`, {reply_to_message_id: ctx.message.message_id});
+	await ctx.reply(getEveningMessage(`Назначены ревьюверы для MR: ${reviewerMentions}`), {
+		reply_to_message_id: ctx.message.message_id,
+		parse_mode: "HTML",
+		disable_web_page_preview: true
+	});
 }
 
 bot.on('msg:text').filter(startMessage, async (ctx) => await startBot(ctx))
@@ -132,7 +142,6 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 	if (match) {
 		// Автор сообщения
 		const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-		
 		// Назначаем ревьюверов на основе найденного MR
 		await assignReviewers(ctx, message, username);
 	}
@@ -174,7 +183,7 @@ const listUsers = async ctx => {
 	const active = activeUsers.map(user => `${user.messengerNick} - ${user.gitlabName}`).join('\n');
 	
 	const response = `Все разработчики:\n${allUsers}\n\nАктивные разработчики:\n${active}\n\nВременно не активные разработчики:\n${excluded}`;
-	await ctx.reply(response, {parse_mode: 'HTML', disable_web_page_preview: true});
+	await ctx.reply(response);
 	await showMenu(ctx);
 };
 
