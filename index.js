@@ -1,6 +1,12 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import dotenv from 'dotenv';
-import { checkMr, getEveningMessage, getRandomElements, getRandomMessage } from './helpers.js';
+import {
+  checkMr,
+  getEveningMessage,
+  getRandomElements,
+  getRandomPhraseWithCounter,
+  getUserTimeMessage,
+} from './helpers.js';
 import { manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
@@ -108,7 +114,7 @@ const resetMrCounterIfNeeded = async () => {
 
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  // if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
+  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
   await resetMrCounterIfNeeded();
   mrCounter += count;
   await saveMrCounter();
@@ -122,8 +128,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
 };
 
 const sendMotivationalMessage = async (ctx) => {
-  const messageTemplate = getRandomMessage(motivationalMessages);
-  const message = messageTemplate.replace('${mrCounter}', mrCounter);
+  const message = getRandomPhraseWithCounter(motivationalMessages, mrCounter);
   await ctx.reply(message);
 };
 
@@ -264,7 +269,8 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   const reviewers = getRandomElements(availableReviewers, 2);
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
   await incrementMrCounter(ctx, countMrs); // Одобавляем + countMrs к счетчику МРов
-  await ctx.reply(getEveningMessage(`Назначены ревьюверы: ${reviewerMentions}`), {
+  const timeMessage = getUserTimeMessage(ctx);
+  await ctx.reply(getEveningMessage(`Назначены ревьюверы: ${reviewerMentions}`, timeMessage), {
     reply_to_message_id: ctx.message.message_id,
     parse_mode: 'HTML',
     disable_web_page_preview: true,
@@ -285,7 +291,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
   // если несколько МРов - добавил шутку, чтобы все знали что бот не завис,
   // так как нужно время чтобы прочекать все МРы
   if (mrLinks.length > 4) {
-    await ctx.reply(getRandomMessage(manyMrPhrases), { reply_to_message_id: ctx.message.message_id });
+    await ctx.reply(getRandomPhraseWithCounter(manyMrPhrases, mrLinks.length), {
+      reply_to_message_id: ctx.message.message_id,
+    });
   }
 
   for (const mrUrl of mrLinks) {
@@ -440,7 +448,8 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
   }
 
   if (success) {
-    await ctx.reply(getEveningMessage(allAnswers), {
+    const timeMessage = getUserTimeMessage(ctx);
+    await ctx.reply(getEveningMessage(allAnswers, timeMessage), {
       reply_to_message_id: ctx.message.message_id,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
@@ -461,7 +470,8 @@ const assignReviewers = async (ctx, message, authorNick) => {
     .filter((user) => !excludedUsers.includes(user.messengerNick));
 
   if (availableReviewers.length === 0) {
-    await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴\nСейчас разберемся!`), {
+    const timeMessage = getUserTimeMessage(ctx);
+    await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴\nСейчас разберемся!`, timeMessage), {
       reply_to_message_id: ctx.message.message_id,
       disable_web_page_preview: true,
     });
@@ -471,9 +481,11 @@ const assignReviewers = async (ctx, message, authorNick) => {
 
   if (availableReviewers.length === 1) {
     const reviewer = getRandomElements(availableReviewers, 1);
+    const timeMessage = getUserTimeMessage(ctx);
     await ctx.reply(
       getEveningMessage(
         `Назначен единственный доступный ревьювер: ${reviewer[0].messengerNick}. Требуется еще 1 ревьювер.😳`,
+        timeMessage,
       ),
       {
         reply_to_message_id: ctx.message.message_id,
