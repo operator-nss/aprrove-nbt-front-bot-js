@@ -188,14 +188,14 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
     return false; // Возвращаем false, если нет ссылок MR
   }
 
-  let allAnswers = '';
-  let error = '';
+  let allAnswers = ''; // Собираем все невалидные сообщения для всех МРов
+  let error = ''; // Собираем ошибки
   let success = false; // Флаг успешного выполнения
 
   // если несколько МРов - добавил шутку, чтобы все знали что бот не завис,
   // так как нужно время чтобы прочекать все МРы
   if (mrLinks.length > 4) {
-    await ctx.reply(getRandomMessage(manyMrPhrases));
+    await ctx.reply(getRandomMessage(manyMrPhrases), { reply_to_message_id: ctx.message.message_id });
   }
 
   for (const mrUrl of mrLinks) {
@@ -338,7 +338,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
-      error += `МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`;
+      await sendServiceMessage(`МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`);
       return false; // Если произошла ошибка, возвращаем false
     }
   }
@@ -390,7 +390,7 @@ const assignReviewers = async (ctx, message, authorNick) => {
 
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
   if (!mrLinks || !mrLinks.length) {
-    return await sendServiceMessage(`${message}\n\n. Какая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
+    return await sendServiceMessage(`${message}\n\nКакая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
   }
 
   // Пробуем получить ревьюверов через GitLab
