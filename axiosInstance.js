@@ -8,14 +8,14 @@ const GITLAB_TOKEN = process.env.GITLAB_ACCESS_TOKEN;
 
 // Создаем агент с отключенной проверкой сертификатов
 const agent = new https.Agent({
-	rejectUnauthorized: false
+  rejectUnauthorized: false,
 });
 
 const axiosInstance = axios.create({
-	httpsAgent: agent,
-	headers: {
-		'PRIVATE-TOKEN': GITLAB_TOKEN
-	}
+  httpsAgent: agent,
+  headers: {
+    'PRIVATE-TOKEN': GITLAB_TOKEN,
+  },
 });
 
 export default axiosInstance;
