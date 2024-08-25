@@ -248,14 +248,19 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const projectId = reallyProject?.id;
         const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}`;
         const { data: mrStatusResponse, status: mrStatusStatus } = await axiosInstance.get(mrStatusUrl);
-
+        console.log('mrStatusResponse', mrStatusResponse);
         if (mrStatusStatus !== 200 || mrStatusStatus === 404) {
           error += `МР: ${mrUrl}.\nОшибка: Не смог получить статус МРа в API Gitlab`;
           return false;
         }
 
-        const mergeRequestTitle = mrStatusResponse.title;
-        const mergeRequestState = mrStatusResponse.state;
+        const mergeRequestTitle = mrStatusResponse?.title;
+        const mergeRequestState = mrStatusResponse?.state;
+        const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
+
+        if (!!mergeRequestPipelineFailed) {
+          allAnswers += '🚨В данном Мре упал pipeline. Посмотри в чем проблема, пожалуйста!🚨\n';
+        }
 
         if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
           allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Ревьюверы не назначаются на MRы в статусе 'Draft'🚨\n`;
