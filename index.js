@@ -202,7 +202,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick) => {
 
 const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
-  console.log('message', message);
+
   if (!mrLinks || !mrLinks.length) {
     return false; // Возвращаем false, если нет ссылок MR
   }
@@ -248,7 +248,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const projectId = reallyProject?.id;
         const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}`;
         const { data: mrStatusResponse, status: mrStatusStatus } = await axiosInstance.get(mrStatusUrl);
-        console.log('mrStatusResponse', mrStatusResponse);
+
         if (mrStatusStatus !== 200 || mrStatusStatus === 404) {
           error += `МР: ${mrUrl}.\nОшибка: Не смог получить статус МРа в API Gitlab`;
           return false;
@@ -424,7 +424,6 @@ const assignReviewers = async (ctx, message, authorNick) => {
     return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
   }
 
-  console.log('simpleChooseReviewers');
   // Если нет соединения с GitLab, используем резервный метод
   await simpleChooseReviewers(ctx, message, authorNick);
 };
