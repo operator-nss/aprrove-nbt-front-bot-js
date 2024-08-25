@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import dotenv from 'dotenv';
 import { checkMr, getEveningMessage, getRandomElements, getRandomMessage } from './helpers.js';
-import { manyMrPhrases } from './constants.js';
+import { manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
@@ -108,10 +108,23 @@ const resetMrCounterIfNeeded = async () => {
 
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
+  // if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
   await resetMrCounterIfNeeded();
   mrCounter += count;
   await saveMrCounter();
+
+  // Отправляем мотивационное сообщение при достижении порога 20 сообщений
+  if (mrCounter % 20 === 0) {
+    setTimeout(async () => {
+      await sendMotivationalMessage(ctx);
+    }, 30000);
+  }
+};
+
+const sendMotivationalMessage = async (ctx) => {
+  const messageTemplate = getRandomMessage(motivationalMessages);
+  const message = messageTemplate.replace('${mrCounter}', mrCounter);
+  await ctx.reply(message);
 };
 
 const loadUserList = async () => {
