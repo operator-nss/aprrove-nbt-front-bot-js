@@ -8,6 +8,7 @@ export const userList = [
   { messengerNick: '@krr_ruslan', gitlabName: 'Ruslan.Karamov' },
 ];
 
+// Для тех кто работает ночью
 export const funnyPhrases = [
   'Опять за работу, когда все отдыхают?🥴',
   'Тебе что, скучно спать ночью?🥴',

@@ -734,6 +734,8 @@ bot.callbackQuery(/.*/, async (ctx) => {
       await ctx.reply('Действие отменено.');
       await showMenu(ctx);
       break;
+    default:
+      break;
   }
 });
 
