@@ -493,7 +493,7 @@ const showUserList = async (ctx, action) => {
 
 // Обработка команды /help
 const helpCommand = async (ctx) => {
-  const helpText =
+  let helpText =
     '/start - Запустить бота\n' +
     '/help - Показать это сообщение\n\n' +
     '<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n' +
@@ -503,6 +503,9 @@ const helpCommand = async (ctx) => {
     '<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Ревьюверы выбираются только из списка активных сотрудников\n\n' +
     '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).';
 
+  if ((ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() || ctx.chat.type === 'private') && (await isAdmin(ctx))) {
+    helpText += '\n\n<b><i>Предложения по доработке</i></b> - Отправить разработчику текст с пожеланием доработки бота';
+  }
   await ctx.reply(helpText, { parse_mode: 'HTML' });
   await showMenu(ctx);
 };
