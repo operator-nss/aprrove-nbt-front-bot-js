@@ -817,7 +817,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
     case 'suggestions':
       session.awaitingSuggestionsInput = true;
       const cancelSuggestionsKeyboard = new InlineKeyboard().text('Отмена', 'cancel_suggestions');
-      await ctx.reply('Напишите Ваши пожелания по доработке. Я их передам хозяину. 😈', {
+      await ctx.reply('Напишите Ваши пожелания\nпо доработке. Я их передам\nхозяину. 😈', {
         reply_markup: cancelSuggestionsKeyboard,
       });
       break;
