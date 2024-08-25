@@ -202,6 +202,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick) => {
 
 const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
+  console.log('message', message);
   if (!mrLinks || !mrLinks.length) {
     return false; // Возвращаем false, если нет ссылок MR
   }
@@ -540,13 +541,29 @@ bot.on(':voice', async (ctx) => {
 
 // Обработка сообщений с MR
 bot.on('::url').filter(checkMr, async (ctx) => {
-  const message = ctx.message.text.toLowerCase();
-  const match = message.includes('mr:');
+  const match = ctx.message?.text?.toLowerCase()?.includes('mr:');
   if (match) {
+    const { text, entities } = ctx.message;
+
+    // Массив для хранения всех ссылок
+    let urls = '';
+
+    // Проходим по всем entities и ищем ссылки(могут быть скрыты за richText)
+    entities.forEach((entity) => {
+      if (entity.type === 'url') {
+        // Извлекаем ссылку из текста, используя offset и length
+        const url = text.substring(entity.offset, entity.offset + entity.length);
+        urls += ' ' + url;
+      } else if (entity.type === 'text_link') {
+        // Если это текстовая ссылка, берем её напрямую из entity
+        urls += ' ' + entity.url;
+      }
+    });
+
     // Автор сообщения
     const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
     // Назначаем ревьюверов на основе найденного MR
-    await assignReviewers(ctx, message, username);
+    await assignReviewers(ctx, urls, username);
   }
 });
 
