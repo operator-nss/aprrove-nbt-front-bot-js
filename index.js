@@ -259,7 +259,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
 
         if (!!mergeRequestPipelineFailed) {
-          allAnswers += '🚨В данном Мре упал pipeline. Посмотри в чем проблема, пожалуйста!🚨\n';
+          allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема, пожалуйста!🚨\n';
         }
 
         if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
