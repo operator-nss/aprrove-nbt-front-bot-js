@@ -619,8 +619,6 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
     const userIndex = userList.findIndex((user) => user.messengerNick === username);
 
     if (userIndex !== -1) {
-      const user = userList[userIndex];
-
       let responseMessage = '';
 
       switch (action) {
