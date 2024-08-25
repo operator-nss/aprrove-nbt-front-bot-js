@@ -1,13 +1,16 @@
 import {Bot, InlineKeyboard} from "grammy";
 import dotenv from "dotenv";
-import {checkMr, getEveningMessage, getRandomElements, helpMessage, startMessage} from "./helpers.js";
-import {userList} from "./constants.js";
+import {checkMr, getEveningMessage, getRandomElements, getRandomMessage, helpMessage, startMessage} from "./helpers.js";
+import {manyMrPhrases, userList} from "./constants.js";
+import axios from "axios";
+import axiosInstance from "./axiosInstance.js";
 
 dotenv.config();
 
 const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const GITLAB_TOKEN = process.env.GITLAB_ACCESS_TOKEN; // GitLab Access Token
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
+const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 
 // Создаем бота
 const bot = new Bot(TOKEN);
@@ -21,10 +24,10 @@ let loggingEnabled = false;
 // Список временно не активных разработчиков
 const excludedUsers = [];
 
-bot.api.setMyCommands([
-	{command: 'start', description: 'Запуск бота'},
-	{command: 'help', description: 'WTF'}
-], {scope: {type: 'all_private_chats'}});
+bot.api.setMyCommands([{command: 'start', description: 'Запуск бота'}, {
+	command: 'help',
+	description: 'WTF'
+}], {scope: {type: 'all_private_chats'}});
 
 // Обработка команды /start
 bot.command('start', async (ctx) => await startBot(ctx));
@@ -92,12 +95,181 @@ const startBot = async (ctx) => {
 	}
 }
 
-// Функция для назначения ревьюверов
-async function assignReviewers(ctx, message, authorNick) {
-	// Здесь нужно добавить логику назначения ревьюверов на основе MR URL.
-	// Например, выбрать двух ревьюверов из userList, которые не находятся в excludedUsers.
+const simpleChooseReviewers = async (ctx, message, authorNick) => {
+	// Выбор двух случайных ревьюверов
 	const availableReviewers = userList.filter(user => user.messengerNick !== authorNick).filter(user => !excludedUsers.includes(user.messengerNick));
-	console.log('availableReviewers', availableReviewers);
+	const reviewers = getRandomElements(availableReviewers, 2);
+	const reviewerMentions = reviewers.map(reviewer => reviewer.messengerNick).join(' и ');
+	
+	await ctx.reply(getEveningMessage(`Назначены ревьюверы(сбой подключения к gitlab)(: ${reviewerMentions}`), {
+		reply_to_message_id: ctx.message.message_id, parse_mode: "HTML", disable_web_page_preview: true
+	});
+}
+
+const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
+	const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
+	if (!mrLinks || !mrLinks.length) {
+		return false; // Возвращаем false, если нет ссылок MR
+	}
+	
+	console.log('Обработка MR:', mrLinks, authorNick);
+	let allAnswers = '';
+	let success = false; // Флаг успешного выполнения
+	if(mrLinks.length > 4) {
+		console.log('message mrLinks.length > 4')
+		await ctx.reply(getRandomMessage(manyMrPhrases));
+	}
+	
+	for (const mrUrl of mrLinks) {
+		try {
+			const response = await axiosInstance.get(mrUrl);
+			
+			if (response.status === 200) {
+				const projectName = mrUrl.match(/\/([^\/]+)\/-\/merge_requests\//)?.[1];
+				const mrId = mrUrl.match(/\/merge_requests\/(\d+)$/)?.[1];
+				
+				const projectSearchUrl = `https://gitlab.dpr.norbit.ru/api/v4/projects?search=${projectName}`;
+				const {data: projectSearchUrlData, status: projectSearchUrlStatus} = await axiosInstance.get(projectSearchUrl);
+				
+				if (projectSearchUrlStatus !== 200) {
+					console.log(131)
+					return false;
+				}
+				console.log('projectName', projectName)
+				// console.log('projectSearchUrlData', projectSearchUrlData)
+				let reallyProject = null;
+				for (const project of projectSearchUrlData) {
+					if (project?.path_with_namespace?.toLowerCase()?.includes('andrey.singaevskiy') || project?.path_with_namespace?.toLowerCase()?.includes('bpmsoft')) {
+						continue;
+					}
+					reallyProject = project;
+					break;
+				}
+				
+				const projectId = reallyProject?.id;
+				console.log('projectId reallyProject', projectId)
+				const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}`;
+				const {data: mrStatusResponse, status: mrStatusStatus} = await axiosInstance.get(mrStatusUrl);
+				
+				if (mrStatusStatus !== 200 || mrStatusStatus === 404) {
+					console.log(150)
+					return false;
+				}
+				
+				const mergeRequestTitle = mrStatusResponse.title;
+				const mergeRequestState = mrStatusResponse.state;
+				console.log('mergeRequestTitle', mergeRequestTitle)
+				if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
+					allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Апруверы не назначаются на MRы в статусе 'Draft'🚨\n`;
+					console.log('allAnswers', allAnswers)
+					success = true;
+					continue;
+				}
+				
+				if (mergeRequestState?.toLowerCase() === "merged") {
+					allAnswers += `\n${mrUrl}\nMR уже влит.\n`;
+					success = true;
+					continue;
+				}
+				
+				if (mergeRequestState?.toLowerCase() === "closed") {
+					allAnswers += `\n${mrUrl}\nMR закрыт.\n`;
+					success = true;
+					continue;
+				}
+				console.log('projectId', projectId)
+				const approvalRulesUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approval_rules`;
+				const {data: approvalRulesUrlResponse, status: approvalRulesUrlStatus} = await axiosInstance.get(approvalRulesUrl);
+				
+				if (approvalRulesUrlStatus !== 200) {
+					console.log(176)
+					return false;
+				}
+				
+				let leadApprovers = [];
+				let simpleApprovers = [];
+				let leadRequired = false;
+				
+				for (const rule of approvalRulesUrlResponse) {
+					if (!rule.name || !rule.approvals_required || !rule.eligible_approvers) {
+						continue;
+					}
+					
+					if (rule?.name?.toLowerCase() === 'lead') {
+						leadRequired = rule.approvals_required > 0;
+						leadApprovers = rule.eligible_approvers.filter(approver =>
+							userList.some(user => user.gitlabName === approver.username && user.messengerNick !== authorNick && !excludedUsers.includes(user.messengerNick))
+						);
+					} else if (rule.name.startsWith("Check MR")) {
+						simpleApprovers = rule.eligible_approvers.filter(approver =>
+							userList.some(user => user.gitlabName === approver.username && user.messengerNick !== authorNick && !excludedUsers.includes(user.messengerNick))
+						);
+					}
+				}
+				console.log('fpersdru')
+				if (leadApprovers.length === 0 && simpleApprovers.length === 0) {
+					allAnswers += `\n${mrUrl}\nНет доступных ревьюверов на основе данных gitlab.\n🚨Никто не работает из ревьюверов или может ты скинул его не в тот чатик?🤔😉🚨`;
+					continue;
+				}
+				
+				let selectedLeadNick = null;
+				let selectedCheckMrNick = null;
+				let leadUnavailableMessage = "";
+				
+				if (leadRequired && leadApprovers.length > 0) {
+					const selectedLead = leadApprovers[Math.floor(Math.random() * leadApprovers.length)];
+					selectedLeadNick = userList.find(user => user.gitlabName === selectedLead.username).messengerNick;
+				} else if (leadRequired && leadApprovers.length === 0) {
+					leadUnavailableMessage = "\nВ данный МР требуется ревьювер из команды Lead, но эти разработчики сегодня не работают.😔";
+					if (simpleApprovers.length > 0) {
+						const selectedLead = simpleApprovers[Math.floor(Math.random() * simpleApprovers.length)];
+						selectedLeadNick = userList.find(user => user.gitlabName === selectedLead.username).messengerNick;
+					}
+				}
+				
+				if (simpleApprovers.length > 0) {
+					let remainingApprovers = simpleApprovers.filter(user => user.username !== selectedLeadNick);
+					if (remainingApprovers.length > 0) {
+						const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
+						selectedCheckMrNick = userList.find(user => user.gitlabName === selectedCheckMr.username).messengerNick;
+					} else {
+						selectedCheckMrNick = selectedLeadNick; // если только один доступный ревьювер, он будет и в Lead и в Check MR
+					}
+				}
+				
+				if (!selectedLeadNick) {
+					selectedLeadNick = selectedCheckMrNick;
+					let remainingApprovers = simpleApprovers.filter(user => user.username !== selectedCheckMrNick);
+					if (remainingApprovers.length > 0) {
+						const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
+						selectedCheckMrNick = userList.find(user => user.gitlabName === selectedCheckMr.username).messengerNick;
+					}
+				}
+				
+				allAnswers += `\n${mrUrl}\nНазначены ревьюверы (на основе данных gitlab): ${selectedLeadNick} и ${selectedCheckMrNick}${leadUnavailableMessage}\n`;
+				success = true; // Устанавливаем флаг успешного выполнения
+			}
+		} catch (error) {
+			console.error('Ошибка при подключении к GitLab:');
+			return false; // Если произошла ошибка, возвращаем false
+		}
+	}
+	
+	if (success) {
+		await ctx.reply(getEveningMessage(allAnswers), {
+			reply_to_message_id: ctx.message.message_id,
+			parse_mode: "HTML",
+			disable_web_page_preview: true
+		});
+		return true; // Возвращаем true, если удалось успешно выполнить назначение ревьюверов
+	} else {
+		return false; // Возвращаем false, если не удалось выполнить назначение
+	}
+}
+
+const assignReviewers = async (ctx, message, authorNick) => {
+	
+	const availableReviewers = userList.filter(user => user.messengerNick !== authorNick).filter(user => !excludedUsers.includes(user.messengerNick));
 	
 	if (availableReviewers.length === 0) {
 		await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴`), {
@@ -109,7 +281,6 @@ async function assignReviewers(ctx, message, authorNick) {
 	
 	if (availableReviewers.length === 1) {
 		const reviewer = getRandomElements(availableReviewers, 1);
-		console.log('reviewer', reviewer);
 		await ctx.reply(getEveningMessage(`Назначен единственный доступный ревьювер: ${reviewer[0].messengerNick}. Требуется еще 1 апрувер.😳`), {
 			reply_to_message_id: ctx.message.message_id,
 			disable_web_page_preview: true
@@ -117,16 +288,17 @@ async function assignReviewers(ctx, message, authorNick) {
 		return;
 	}
 	
-	// Выбор двух случайных ревьюверов
-	const reviewers = getRandomElements(availableReviewers, 2);
-	const reviewerMentions = reviewers.map(reviewer => reviewer.messengerNick).join(' и ');
+	// Пробуем получить ревьюверов через GitLab
+	const gitlabSuccess = await checkMergeRequestByGitlab(ctx, message, authorNick);
+	if (gitlabSuccess) {
+		return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
+	}
 	
-	await ctx.reply(getEveningMessage(`Назначены ревьюверы для MR: ${reviewerMentions}`), {
-		reply_to_message_id: ctx.message.message_id,
-		parse_mode: "HTML",
-		disable_web_page_preview: true
-	});
-}
+	console.log('Если нет соединения с GitLab.');
+	// Если нет соединения с GitLab, используем резервный метод
+	await simpleChooseReviewers(ctx, message, authorNick);
+};
+
 
 bot.on('msg:text').filter(startMessage, async (ctx) => await startBot(ctx))
 bot.on('msg:text').filter(helpMessage, async (ctx) => await helpCommand(ctx))
@@ -313,16 +485,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
 
 // Обработка команды /help
 async function helpCommand(ctx) {
-	const helpText = (
-		"/start - Запустить бота\n" +
-		"/help - Показать это сообщение\n\n" +
-		"<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n" +
-		"<b><i>Удалить разработчика</i></b> - Удалить разработчика из списка сотрудников (например, удалить уволенного сотрудника)\n\n" +
-		"<b><i>Исключить разработчика</i></b> - Сделать разработчика временно неактивным (например, разработчик в отпуске или на больничном)\n\n" +
-		"<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n" +
-		"<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Апруверы выбираются только из списка активных сотрудников\n\n" +
-		"<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования)."
-	);
+	const helpText = ("/start - Запустить бота\n" + "/help - Показать это сообщение\n\n" + "<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n" + "<b><i>Удалить разработчика</i></b> - Удалить разработчика из списка сотрудников (например, удалить уволенного сотрудника)\n\n" + "<b><i>Исключить разработчика</i></b> - Сделать разработчика временно неактивным (например, разработчик в отпуске или на больничном)\n\n" + "<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n" + "<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Апруверы выбираются только из списка активных сотрудников\n\n" + "<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).");
 	
 	await ctx.reply(helpText, {parse_mode: 'HTML'});
 	await showMenu(ctx);

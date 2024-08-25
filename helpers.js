@@ -20,16 +20,19 @@ export const getRandomElements = (array, n) => {
 	return result;
 };
 
+export const getRandomMessage = (funnyPhrases, message = '') => {
+	const randomIndex = Math.floor(Math.random() * funnyPhrases.length);
+	return funnyPhrases[randomIndex] + '\n' + message;
+}
+
 export const getEveningMessage = (message) => {
 	// Получаем текущее время по Москве
 	const moscowTime = moment().tz('Europe/Moscow');
 	// Получаем часы по Москве
 	const currentHour = moscowTime.hour();
-	console.log('currentHour', currentHour)
 	// Проверяем, находится ли время в интервале с 20 до 0 часов
 	if (currentHour >= 20 || currentHour === 0) {
-		const randomIndex = Math.floor(Math.random() * funnyPhrases.length);
-		return funnyPhrases[randomIndex] + '\n' + message;
+		return getRandomMessage(funnyPhrases, message)
 	}
 	return message
 }
