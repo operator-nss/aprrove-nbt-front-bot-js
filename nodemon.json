@@ -1,0 +1,3 @@
+{
+  "ignore": ["userList.json", "excludedUsers.json"]
+}

@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "nodemon --ignore userList.json --ignore excludedUsers.json"
   },
   "author": "",
   "license": "ISC",

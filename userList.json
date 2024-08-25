@@ -4,10 +4,6 @@
     "gitlabName": "Aleksey.Sokolov"
   },
   {
-    "messengerNick": "@Ikulai_frontDev",
-    "gitlabName": "Ivan.Kulay"
-  },
-  {
     "messengerNick": "@IIvangelion",
     "gitlabName": "Ivan.Dyatlov"
   },
@@ -16,11 +12,15 @@
     "gitlabName": "Stanislav.Konovalov"
   },
   {
-    "messengerNick": "@Pror0k_WH",
-    "gitlabName": "Evgeny.Kovalev"
-  },
-  {
     "messengerNick": "@krr_ruslan",
     "gitlabName": "Ruslan.Karamov"
+  },
+  {
+    "messengerNick": "@Ikulai_frontDev",
+    "gitlabName": "Ivan.Kulay"
+  },
+  {
+    "messengerNick": "@Pror0k_WH",
+    "gitlabName": "Evgeny.Kovalev"
   }
 ]

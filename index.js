@@ -16,16 +16,16 @@ const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 // Создаем бота
 const bot = new Bot(TOKEN);
 
+// Все разработчики
 let userList = [];
+// Список временно не активных разработчиков
+let excludedUsers = [];
 
 // Глобальная переменная для хранения состояния сессий
 const sessions = {};
 
 // Глобальная переменная для хранения состояния логирования
 let loggingEnabled = false;
-
-// Список временно не активных разработчиков
-const excludedUsers = [];
 
 bot.api.setMyCommands([{command: 'start', description: 'Запуск бота'}, {
 	command: 'help',
@@ -42,6 +42,16 @@ const loadUserList = async () => {
 	}
 };
 
+const loadExcludedUsers = async () => {
+	try {
+		const data = await fs.readFileSync(path.resolve('excludedUsers.json'));
+		excludedUsers = JSON.parse(data);
+		console.log('Excluded users loaded');
+	} catch (error) {
+		console.error('Ошибка при загрузке excludedUsers:', error);
+	}
+};
+
 // Сохранение userList в JSON файл
 const saveUserList = () => {
 	try {
@@ -51,12 +61,22 @@ const saveUserList = () => {
 	}
 };
 
-loadUserList()
+// Сохранение excludedUsers в JSON файл
+const saveExcludedUsers = () => {
+	try {
+		fs.writeFileSync(path.resolve('excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
+	} catch (error) {
+		console.error('Ошибка при сохранении excludedUsers:', error);
+	}
+};
 
-// Обработка команды /start
-bot.command('start', async (ctx) => {
-	await startBot(ctx);
-});
+const addUser = (messengerNick, gitlabName) => {
+	userList.push({messengerNick, gitlabName});
+	saveUserList(); // Сохранение изменений в файл
+};
+
+loadUserList()
+loadExcludedUsers()
 
 // Функция для управления сессиями
 const getSession = chatId => {
@@ -206,7 +226,10 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				}
 				console.log('projectId', projectId)
 				const approvalRulesUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approval_rules`;
-				const {data: approvalRulesUrlResponse, status: approvalRulesUrlStatus} = await axiosInstance.get(approvalRulesUrl);
+				const {
+					data: approvalRulesUrlResponse,
+					status: approvalRulesUrlStatus
+				} = await axiosInstance.get(approvalRulesUrl);
 				console.log('approvalRulesUrlResponse', approvalRulesUrlResponse)
 				if (approvalRulesUrlStatus !== 200) {
 					error = 'не получены апруверы в gitlab'
@@ -332,55 +355,20 @@ const assignReviewers = async (ctx, message, authorNick) => {
 	await simpleChooseReviewers(ctx, message, authorNick, error);
 };
 
-
-bot.on('msg:text').filter(startMessage, async (ctx) => await startBot(ctx))
-bot.on('msg:text').filter(helpMessage, async (ctx) => await helpCommand(ctx))
-
-bot.on(':voice', async ctx => {
-	await ctx.reply('Ай нехорошо голосовые в чат отправлять!🥴', {reply_to_message_id: ctx.message.message_id})
-})
-
-// Обработка сообщений с MR
-bot.on('::url').filter(checkMr, async (ctx) => {
-	const message = ctx.message.text.toLowerCase();
-	console.log('Обработка сообщений с MR', message);
-	const match = message.includes('mr:');
-	if (match) {
-		// Автор сообщения
-		const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-		// Назначаем ревьюверов на основе найденного MR
-		await assignReviewers(ctx, message, username);
+const excludeUser = async (username) => {
+	if (!excludedUsers.includes(username)) {
+		excludedUsers.push(username);
+		await saveExcludedUsers(); // Сохранение изменений в файл
 	}
-})
+};
 
-// Обработка добавления пользователя
-bot.on('msg:text', async (ctx) => {
-	const session = getSession(ctx.chat.id);
-	// если не нажата кнопка добавления пользователя
-	if (!session.awaitingUserInput) return
-	console.log('Обработка добавления пользователя', session);
-	
-	const [telegramNick, gitlabNick] = ctx.message.text.split(' ');
-	
-	if (!telegramNick || !gitlabNick || ctx.message.text.split(' ').length !== 2) {
-		await ctx.reply('Неверный формат. Введите ник разработчика в формате: "@TelegramNick GitLabNick", например @ivanov Ivan.Ivanov');
-		return;
+const includeUser = async (username) => {
+	const index = excludedUsers.indexOf(username);
+	if (index !== -1) {
+		excludedUsers.splice(index, 1);
+		await saveExcludedUsers(); // Сохранение изменений в файл
 	}
-	
-	const exists = userList.find(user => user.messengerNick === telegramNick);
-	
-	if (!exists) {
-		userList.push({messengerNick: telegramNick, gitlabName: gitlabNick});
-		saveUserList(); // Сохранение изменений в файл
-		await ctx.reply(`Разработчик ${telegramNick} добавлен в список с GitLab ником ${gitlabNick}.`);
-	} else {
-		await ctx.reply(`Разработчик ${telegramNick} уже в списке.`);
-	}
-	
-	session.awaitingUserInput = false;
-	await listUsers(ctx);
-});
-
+};
 
 // Функция для отображения списка пользователей
 const listUsers = async ctx => {
@@ -421,9 +409,70 @@ const showUserList = async (ctx, action) => {
 	});
 };
 
+// Обработка команды /help
+const helpCommand = async ctx => {
+	const helpText = ("/start - Запустить бота\n" + "/help - Показать это сообщение\n\n" + "<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n" + "<b><i>Удалить разработчика</i></b> - Удалить разработчика из списка сотрудников (например, удалить уволенного сотрудника)\n\n" + "<b><i>Исключить разработчика</i></b> - Сделать разработчика временно неактивным (например, разработчик в отпуске или на больничном)\n\n" + "<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n" + "<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Апруверы выбираются только из списка активных сотрудников\n\n" + "<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).");
+	
+	await ctx.reply(helpText, {parse_mode: 'HTML'});
+	await showMenu(ctx);
+};
+
+// Обработка команды /start
+bot.command('start', async (ctx) => {
+	await startBot(ctx);
+});
+
+bot.on('msg:text').filter(startMessage, async (ctx) => await startBot(ctx))
+bot.on('msg:text').filter(helpMessage, async (ctx) => await helpCommand(ctx))
+
+bot.on(':voice', async ctx => {
+	await ctx.reply('Ай нехорошо голосовые в чат отправлять!🥴', {reply_to_message_id: ctx.message.message_id})
+})
+
+// Обработка сообщений с MR
+bot.on('::url').filter(checkMr, async (ctx) => {
+	const message = ctx.message.text.toLowerCase();
+	console.log('Обработка сообщений с MR', message);
+	const match = message.includes('mr:');
+	if (match) {
+		// Автор сообщения
+		const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+		// Назначаем ревьюверов на основе найденного MR
+		await assignReviewers(ctx, message, username);
+	}
+})
+
+// Обработка добавления пользователя
+bot.on('msg:text', async (ctx) => {
+	const session = getSession(ctx.chat.id);
+	// если не нажата кнопка добавления пользователя
+	if (!session.awaitingUserInput) return
+	console.log('Обработка добавления пользователя', session);
+	
+	const [telegramNick, gitlabNick] = ctx.message.text.split(' ');
+	
+	if (!telegramNick || !gitlabNick || ctx.message.text.split(' ').length !== 2) {
+		await ctx.reply('Неверный формат. Введите ник разработчика в формате: "@TelegramNick GitLabNick", например @ivanov Ivan.Ivanov');
+		return;
+	}
+	
+	const exists = userList.find(user => user.messengerNick === telegramNick);
+	
+	if (!exists) {
+		addUser(telegramNick, gitlabNick)
+		await ctx.reply(`Разработчик ${telegramNick} добавлен в список с GitLab ником ${gitlabNick}.`);
+	} else {
+		await ctx.reply(`Разработчик ${telegramNick} уже в списке.`);
+	}
+	
+	session.awaitingUserInput = false;
+	console.log(469)
+	await listUsers(ctx);
+});
+
 // Обработка выбранного действия над пользователем
 bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) => {
-	console.log('callbackQuery', ctx)
+	console.log('callbackQuery 474')
 	try {
 		const [action, username] = ctx.callbackQuery.data.split(':');
 		console.log('Parsed action:', action);
@@ -436,29 +485,40 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
 			const user = userList[userIndex];
 			console.log('Found user:', user);
 			
+			let responseMessage = '';
+			
 			switch (action) {
 				case 'remove_user':
 					userList.splice(userIndex, 1);
 					saveUserList(); // Сохранение изменений в файл
 					if (excludedUsers.includes(username)) {
-						excludedUsers.splice(excludedUsers.indexOf(username), 1);
+						await includeUser(username);
 					}
-					await ctx.editMessageText(`Разработчик ${username} удален из списка.`);
+					responseMessage = `Разработчик ${username} удален из списка.`;
 					break;
 				case 'exclude_user':
 					if (!excludedUsers.includes(username)) {
-						excludedUsers.push(username);
-						await ctx.editMessageText(`Разработчик ${username} временно не активен.`);
+						await excludeUser(username);
+						responseMessage = `Разработчик ${username} временно не активен.`;
+					} else {
+						console.log(`Разработчик ${username} уже временно не активен.`);
 					}
 					break;
 				case 'include_user':
 					if (excludedUsers.includes(username)) {
-						excludedUsers.splice(excludedUsers.indexOf(username), 1);
-						await ctx.editMessageText(`Разработчик ${username} возвращен в список.`);
+						await includeUser(username);
+						responseMessage = `Разработчик ${username} возвращен в список.`;
+					} else {
+						console.log(`Разработчик ${username} уже активен.`);
 					}
 					break;
 			}
 			
+			// Проверка на изменение сообщения перед его редактированием
+			if (responseMessage) {
+				await ctx.editMessageText(responseMessage);
+			}
+			console.log(521)
 			await listUsers(ctx);
 		} else {
 			console.error('User not found:', username);
@@ -483,6 +543,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
 	
 	switch (action) {
 		case 'list_users':
+			console.log(545)
 			await listUsers(ctx);
 			break;
 		case 'add_user':
@@ -517,14 +578,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
 			break;
 	}
 });
-
-// Обработка команды /help
-async function helpCommand(ctx) {
-	const helpText = ("/start - Запустить бота\n" + "/help - Показать это сообщение\n\n" + "<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n" + "<b><i>Удалить разработчика</i></b> - Удалить разработчика из списка сотрудников (например, удалить уволенного сотрудника)\n\n" + "<b><i>Исключить разработчика</i></b> - Сделать разработчика временно неактивным (например, разработчик в отпуске или на больничном)\n\n" + "<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n" + "<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Апруверы выбираются только из списка активных сотрудников\n\n" + "<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).");
-	
-	await ctx.reply(helpText, {parse_mode: 'HTML'});
-	await showMenu(ctx);
-}
 
 // Запуск бота
 bot.start();
