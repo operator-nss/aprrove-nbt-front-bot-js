@@ -37,13 +37,19 @@ bot.api.setMyCommands(
   { scope: { type: 'all_chat_administrators' } },
 );
 
-const sendServiceMessage = async (message, userId, username) => {
+const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
   try {
-    // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
-    const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}`;
+    if (!userId && !username) return await bot.api.sendMessage(SERVICE_CHAT_ID, message);
 
-    // Отправляем сообщение в сервисный чат
-    await bot.api.sendMessage(SERVICE_CHAT_ID, fullMessage);
+    if (ignoreLogging || loggingEnabled) {
+      // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
+      const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}`;
+
+      // Отправляем сообщение в сервисный чат
+      await bot.api.sendMessage(SERVICE_CHAT_ID, fullMessage, {
+        disable_web_page_preview: true,
+      });
+    }
   } catch (error) {
     console.error('Failed to send service message:', error);
   }
@@ -53,7 +59,6 @@ const loadUserList = async () => {
   try {
     const data = await fs.readFileSync(path.resolve('userList.json'));
     userList = JSON.parse(data);
-    console.log('loadUserList userList');
   } catch (error) {
     console.error('Ошибка при загрузке userList:', error);
   }
@@ -63,7 +68,6 @@ const loadExcludedUsers = async () => {
   try {
     const data = await fs.readFileSync(path.resolve('excludedUsers.json'));
     excludedUsers = JSON.parse(data);
-    console.log('Excluded users loaded');
   } catch (error) {
     console.error('Ошибка при загрузке excludedUsers:', error);
   }
@@ -90,13 +94,11 @@ const saveExcludedUsers = () => {
 const addUser = async (ctx, messengerNick, gitlabName) => {
   userList.push({ messengerNick, gitlabName });
   saveUserList();
-  if (loggingEnabled) {
-    await sendServiceMessage(
-      `Разработчик ${messengerNick} - ${gitlabName} добавлен в список разработчиков✅😊`,
-      ctx.from.id,
-      ctx.from.username,
-    );
-  }
+  await sendServiceMessage(
+    `Разработчик ${messengerNick} - ${gitlabName} добавлен в список разработчиков✅😊`,
+    ctx.from.id,
+    ctx.from.username,
+  );
 };
 
 loadUserList();
@@ -165,7 +167,7 @@ const startBot = async (ctx) => {
   }
 };
 
-const simpleChooseReviewers = async (ctx, message, authorNick, error) => {
+const simpleChooseReviewers = async (ctx, message, authorNick) => {
   // Выбор двух случайных ревьюверов
   const availableReviewers = userList
     .filter((user) => user.messengerNick !== authorNick)
@@ -173,7 +175,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick, error) => {
   const reviewers = getRandomElements(availableReviewers, 2);
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
 
-  await ctx.reply(getEveningMessage(`Назначены ревьюверы(${error})(: ${reviewerMentions}`), {
+  await ctx.reply(getEveningMessage(`Назначены ревьюверы: ${reviewerMentions}`), {
     reply_to_message_id: ctx.message.message_id,
     parse_mode: 'HTML',
     disable_web_page_preview: true,
@@ -186,12 +188,13 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
     return false; // Возвращаем false, если нет ссылок MR
   }
 
-  console.log('Обработка MR:', mrLinks, authorNick);
   let allAnswers = '';
   let error = '';
   let success = false; // Флаг успешного выполнения
+
+  // если несколько МРов - добавил шутку, чтобы все знали что бот не завис,
+  // так как нужно время чтобы прочекать все МРы
   if (mrLinks.length > 4) {
-    console.log('message mrLinks.length > 4');
     await ctx.reply(getRandomMessage(manyMrPhrases));
   }
 
@@ -208,10 +211,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           await axiosInstance.get(projectSearchUrl);
 
         if (projectSearchUrlStatus !== 200) {
-          error = 'не получены данные gitlab';
+          error += `МР: ${mrUrl}.\nОшибка: Не смог подключиться к API Gitlab`;
           return false;
         }
-        console.log('projectName', projectName);
         let reallyProject = null;
         for (const project of projectSearchUrlData) {
           if (
@@ -225,50 +227,46 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         }
 
         const projectId = reallyProject?.id;
-        console.log('projectId reallyProject', projectId);
         const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}`;
         const { data: mrStatusResponse, status: mrStatusStatus } = await axiosInstance.get(mrStatusUrl);
 
         if (mrStatusStatus !== 200 || mrStatusStatus === 404) {
-          error = 'не получен статус МРа в gitlab';
+          error += `МР: ${mrUrl}.\nОшибка: Не смог получить статус МРа в API Gitlab`;
           return false;
         }
 
         const mergeRequestTitle = mrStatusResponse.title;
         const mergeRequestState = mrStatusResponse.state;
-        console.log('mergeRequestTitle', mergeRequestTitle);
 
-        // if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
-        // 	allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Апруверы не назначаются на MRы в статусе 'Draft'🚨\n`;
-        // 	console.log('allAnswers', allAnswers)
-        // 	success = true;
-        // 	continue;
-        // }
+        if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
+          allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Апруверы не назначаются на MRы в статусе 'Draft'🚨\n`;
+          success = true;
+          continue;
+        }
 
         if (mergeRequestState?.toLowerCase() === 'merged') {
-          allAnswers += `\n${mrUrl}\nMR уже влит.\n`;
+          allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
           success = true;
           continue;
         }
 
         if (mergeRequestState?.toLowerCase() === 'closed') {
-          allAnswers += `\n${mrUrl}\nMR закрыт.\n`;
+          allAnswers += `\n${mrUrl}\nЭтот МР закрыт) Может ссылка не та?🤔\n`;
           success = true;
           continue;
         }
-        console.log('projectId', projectId);
         const approvalRulesUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approval_rules`;
         const { data: approvalRulesUrlResponse, status: approvalRulesUrlStatus } =
           await axiosInstance.get(approvalRulesUrl);
-        console.log('approvalRulesUrlResponse', approvalRulesUrlResponse);
         if (approvalRulesUrlStatus !== 200) {
-          error = 'не получены апруверы в gitlab';
+          error += `МР: ${mrUrl}.\nОшибка: Не смог получить апруверов в API Gitlab`;
           return false;
         }
 
         let leadApprovers = [];
         let simpleApprovers = [];
         let leadRequired = false;
+        const activeUsers = userList.filter((user) => !excludedUsers.includes(user.messengerNick));
 
         for (const rule of approvalRulesUrlResponse) {
           if (!rule.name || !rule.approvals_required || !rule.eligible_approvers) {
@@ -278,27 +276,18 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           if (rule?.name?.toLowerCase() === 'lead') {
             leadRequired = rule.approvals_required > 0;
             leadApprovers = rule.eligible_approvers.filter((approver) =>
-              userList.some(
-                (user) =>
-                  user.gitlabName === approver.username &&
-                  user.messengerNick !== authorNick &&
-                  !excludedUsers.includes(user.messengerNick),
-              ),
+              activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
             );
           } else if (rule.name.startsWith('Check MR')) {
             simpleApprovers = rule.eligible_approvers.filter((approver) =>
-              userList.some(
-                (user) =>
-                  user.gitlabName === approver.username &&
-                  user.messengerNick !== authorNick &&
-                  !excludedUsers.includes(user.messengerNick),
-              ),
+              activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
             );
           }
         }
-        console.log('fpersdru');
+
         if (leadApprovers.length === 0 && simpleApprovers.length === 0) {
-          allAnswers += `\n${mrUrl}\nНет доступных ревьюверов на основе данных gitlab.\n🚨Никто не работает из ревьюверов или может ты скинул его не в тот чатик?🤔😉🚨`;
+          allAnswers += `\n${mrUrl}\n🚨Никто не работает из ревьюверов или может ты скинул его не в тот чатик?🤔😉🚨`;
+          error += `МР: ${mrUrl}.\nОшибка: Нет доступных ревьюверов на основе данных API Gitlab`;
           continue;
         }
 
@@ -306,42 +295,50 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         let selectedCheckMrNick = null;
         let leadUnavailableMessage = '';
 
+        // проверяем нужен ли апрув лида
         if (leadRequired && leadApprovers.length > 0) {
-          const selectedLead = leadApprovers[Math.floor(Math.random() * leadApprovers.length)];
-          selectedLeadNick = userList.find((user) => user.gitlabName === selectedLead.username).messengerNick;
+          selectedLeadNick = leadApprovers[Math.floor(Math.random() * leadApprovers.length)].username;
         } else if (leadRequired && leadApprovers.length === 0) {
           leadUnavailableMessage =
             '\nВ данный МР требуется ревьювер из команды Lead, но эти разработчики сегодня не работают.😔';
-          if (simpleApprovers.length > 0) {
-            const selectedLead = simpleApprovers[Math.floor(Math.random() * simpleApprovers.length)];
-            selectedLeadNick = userList.find((user) => user.gitlabName === selectedLead.username).messengerNick;
-          }
+          await sendServiceMessage(
+            `МР: ${mrUrl}.\nОшибка: не хватает активных апруверов из команды Lead. Просьба проверить😊`,
+          );
         }
 
         if (simpleApprovers.length > 0) {
-          let remainingApprovers = simpleApprovers.filter((user) => user.gitlabName !== selectedLeadNick);
+          let remainingApprovers = simpleApprovers.filter((user) => user.username !== selectedLeadNick);
           if (remainingApprovers.length > 0) {
-            const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
-            selectedCheckMrNick = userList.find((user) => user.gitlabName === selectedCheckMr.username).messengerNick;
-          } else {
-            selectedCheckMrNick = selectedLeadNick; // если только один доступный ревьювер, он будет и в Lead и в Check MR
+            selectedCheckMrNick = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)].username;
           }
         }
 
         if (!selectedLeadNick) {
           selectedLeadNick = selectedCheckMrNick;
-          let remainingApprovers = simpleApprovers.filter((user) => user.gitlabName !== selectedCheckMrNick);
+          // Фильтруем оставшихся апруверов, исключая выбранного
+          let remainingApprovers = simpleApprovers.filter(
+            (user) =>
+              activeUsers.find((activeUser) => activeUser.gitlabName === user.username).messengerNick !==
+              selectedLeadNick,
+          );
+
           if (remainingApprovers.length > 0) {
             const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
-            selectedCheckMrNick = userList.find((user) => user.gitlabName === selectedCheckMr.username).messengerNick;
+            selectedCheckMrNick = activeUsers.find(
+              (user) => user.gitlabName === selectedCheckMr.username,
+            ).messengerNick;
           }
         }
+        const messengerNickLead = activeUsers.find((lead) => lead.gitlabName === selectedLeadNick).messengerNick;
+        const messengerNickSimpleReviewer = activeUsers.find(
+          (lead) => lead.gitlabName === selectedCheckMrNick,
+        ).messengerNick;
 
-        allAnswers += `\n${mrUrl}\nНазначены ревьюверы (на основе данных gitlab): ${selectedLeadNick} и ${selectedCheckMrNick}${leadUnavailableMessage}\n`;
+        allAnswers += `\n${mrUrl}\nНазначены ревьюверы: ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
-      error = 'не получены апруверы в gitlab';
+      error += `МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`;
       return false; // Если произошла ошибка, возвращаем false
     }
   }
@@ -352,15 +349,13 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     });
-    return {
-      status: true, // Возвращаем true, если удалось успешно выполнить назначение ревьюверов
-      error: null,
-    };
+    if (!!error) {
+      await sendServiceMessage(`Ошибки при назначении ревьюверов:\n\n${error}`);
+    }
+    return true; // Возвращаем true, если удалось успешно выполнить назначение ревьюверов
   } else {
-    return {
-      status: false, // Возвращаем false, если не удалось выполнить назначение ревьюверов
-      error, // кидаем ошибку
-    };
+    await sendServiceMessage(`Ошибки при подключении к гитлабу:\n\n${error}`);
+    return false;
   }
 };
 
@@ -370,10 +365,11 @@ const assignReviewers = async (ctx, message, authorNick) => {
     .filter((user) => !excludedUsers.includes(user.messengerNick));
 
   if (availableReviewers.length === 0) {
-    await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴`), {
+    await ctx.reply(getEveningMessage(`Нет активных ревьюверов.🥴\nСейчас разберемся!`), {
       reply_to_message_id: ctx.message.message_id,
       disable_web_page_preview: true,
     });
+    await sendServiceMessage(`${message}.\n\nПочему-то нет ревьюверов. Просьба проверить😊`);
     return;
   }
 
@@ -388,18 +384,25 @@ const assignReviewers = async (ctx, message, authorNick) => {
         disable_web_page_preview: true,
       },
     );
+    await sendServiceMessage(`${message}.\n\nПочему-то только один ревьювер доступен. Просьба проверить😊`);
     return;
   }
 
+  const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
+  if (!mrLinks || !mrLinks.length) {
+    return await sendServiceMessage(`${message}\n\n. Какая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
+  }
+
   // Пробуем получить ревьюверов через GitLab
-  const { error, status } = await checkMergeRequestByGitlab(ctx, message, authorNick);
+  const status = await checkMergeRequestByGitlab(ctx, message, authorNick);
 
   if (status) {
     return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
   }
 
+  console.log('simpleChooseReviewers');
   // Если нет соединения с GitLab, используем резервный метод
-  await simpleChooseReviewers(ctx, message, authorNick, error);
+  await simpleChooseReviewers(ctx, message, authorNick);
 };
 
 const excludeUser = async (ctx, username) => {
@@ -500,7 +503,6 @@ bot.on(':voice', async (ctx) => {
 // Обработка сообщений с MR
 bot.on('::url').filter(checkMr, async (ctx) => {
   const message = ctx.message.text.toLowerCase();
-  console.log('Обработка сообщений с MR', message);
   const match = message.includes('mr:');
   if (match) {
     // Автор сообщения
@@ -515,7 +517,6 @@ bot.on('msg:text', async (ctx) => {
   const session = getSession(ctx.chat.id);
   // если не нажата кнопка добавления пользователя
   if (!session.awaitingUserInput) return;
-  console.log('Обработка добавления пользователя', session);
 
   const [telegramNick, gitlabNick] = ctx.message.text.split(' ');
 
@@ -536,24 +537,18 @@ bot.on('msg:text', async (ctx) => {
   }
 
   session.awaitingUserInput = false;
-  console.log(469);
   await listUsers(ctx);
 });
 
 // Обработка выбранного действия над пользователем
 bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) => {
-  console.log('callbackQuery 474');
   try {
     const [action, username] = ctx.callbackQuery.data.split(':');
-    console.log('Parsed action:', action);
-    console.log('Parsed username:', username);
 
     const userIndex = userList.findIndex((user) => user.messengerNick === username);
-    console.log('User index:', userIndex);
 
     if (userIndex !== -1) {
       const user = userList[userIndex];
-      console.log('Found user:', user);
 
       let responseMessage = '';
 
@@ -577,16 +572,12 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
           if (!excludedUsers.includes(username)) {
             await excludeUser(ctx, username);
             responseMessage = `Разработчик ${username} временно не активен.`;
-          } else {
-            console.log(`Разработчик ${username} уже временно не активен.`);
           }
           break;
         case 'include_user':
           if (excludedUsers.includes(username)) {
             await includeUser(ctx, username);
             responseMessage = `Разработчик ${username} возвращен в список.`;
-          } else {
-            console.log(`Разработчик ${username} уже активен.`);
           }
           break;
       }
@@ -595,7 +586,6 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
       if (responseMessage) {
         await ctx.editMessageText(responseMessage);
       }
-      console.log(521);
       await listUsers(ctx);
     } else {
       console.error('User not found:', username);
@@ -610,8 +600,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
   const action = ctx.callbackQuery.data;
   const session = getSession(ctx.chat.id);
 
-  console.log('bot.callbackQuery(/.', action);
-
   // Если не админ
   if (!(await isAdmin(ctx))) {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
@@ -620,7 +608,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
 
   switch (action) {
     case 'list_users':
-      console.log(545);
       await listUsers(ctx);
       break;
     case 'add_user':
@@ -641,13 +628,13 @@ bot.callbackQuery(/.*/, async (ctx) => {
     case 'enable_logging':
       loggingEnabled = true;
       await ctx.reply('Логирование включено.');
-      await sendServiceMessage(`Логирование в группу отладки включено✅`, ctx.from.id, ctx.from.username);
+      await sendServiceMessage(`Логирование в группу отладки включено✅`, ctx.from.id, ctx.from.username, true);
       await showMenu(ctx);
       break;
     case 'disable_logging':
       loggingEnabled = false;
       await ctx.reply('Логирование выключено.');
-      await sendServiceMessage(`Логирование в группу отладки выключено❌`, ctx.from.id, ctx.from.username);
+      await sendServiceMessage(`Логирование в группу отладки выключено❌`, ctx.from.id, ctx.from.username, true);
       await showMenu(ctx);
       break;
     case 'cancel':
