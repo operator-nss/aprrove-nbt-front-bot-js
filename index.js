@@ -527,14 +527,6 @@ bot.command('chatid', async (ctx) => {
   }
 });
 
-// bot.command('suggestions', async (ctx) => {
-// 	if (await isAdmin(ctx)) {
-// 		console.log('suggestions')
-// 	} else {
-// 		await ctx.reply('У вас нет прав для управления этим ботом.');
-// 	}
-// });
-
 bot.on(':voice', async (ctx) => {
   await ctx.reply('Ай нехорошо голосовые в чат отправлять!🥴', { reply_to_message_id: ctx.message.message_id });
 });
