@@ -540,30 +540,27 @@ bot.on(':voice', async (ctx) => {
 
 // Обработка сообщений с MR
 bot.on('::url').filter(checkMr, async (ctx) => {
-  const match = ctx.message?.text?.toLowerCase()?.includes('mr:');
-  if (match) {
-    const { text, entities } = ctx.message;
+  const { text, entities } = ctx.message;
 
-    // Массив для хранения всех ссылок
-    let urls = '';
+  // Массив для хранения всех ссылок
+  let urls = '';
 
-    // Проходим по всем entities и ищем ссылки(могут быть скрыты за richText)
-    entities.forEach((entity) => {
-      if (entity.type === 'url') {
-        // Извлекаем ссылку из текста, используя offset и length
-        const url = text.substring(entity.offset, entity.offset + entity.length);
-        urls += ' ' + url;
-      } else if (entity.type === 'text_link') {
-        // Если это текстовая ссылка, берем её напрямую из entity
-        urls += ' ' + entity.url;
-      }
-    });
+  // Проходим по всем entities и ищем ссылки(могут быть скрыты за richText)
+  entities.forEach((entity) => {
+    if (entity.type === 'url') {
+      // Извлекаем ссылку из текста, используя offset и length
+      const url = text.substring(entity.offset, entity.offset + entity.length);
+      urls += ' ' + url;
+    } else if (entity.type === 'text_link') {
+      // Если это текстовая ссылка, берем её напрямую из entity
+      urls += ' ' + entity.url;
+    }
+  });
 
-    // Автор сообщения
-    const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-    // Назначаем ревьюверов на основе найденного MR
-    await assignReviewers(ctx, urls, username);
-  }
+  // Автор сообщения
+  const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+  // Назначаем ревьюверов на основе найденного MR
+  await assignReviewers(ctx, urls, username);
 });
 
 // Обработка добавления пользователя

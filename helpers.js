@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import { funnyPhrases } from './constants.js';
 
-export const checkMr = (ctx) => ctx.message.text.toLowerCase().includes('mr:');
+export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('mr:');
 
 // Функция для случайного выбора N элементов из массива
 export const getRandomElements = (array, n) => {
