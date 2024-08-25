@@ -1,9 +1,10 @@
 import {Bot, InlineKeyboard} from "grammy";
 import dotenv from "dotenv";
 import {checkMr, getEveningMessage, getRandomElements, getRandomMessage, helpMessage, startMessage} from "./helpers.js";
-import {manyMrPhrases, userList} from "./constants.js";
-import axios from "axios";
+import {manyMrPhrases} from "./constants.js";
 import axiosInstance from "./axiosInstance.js";
+import * as fs from "fs";
+import path from "path";
 
 dotenv.config();
 
@@ -14,6 +15,8 @@ const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 
 // Создаем бота
 const bot = new Bot(TOKEN);
+
+let userList = [];
 
 // Глобальная переменная для хранения состояния сессий
 const sessions = {};
@@ -29,8 +32,31 @@ bot.api.setMyCommands([{command: 'start', description: 'Запуск бота'},
 	description: 'WTF'
 }], {scope: {type: 'all_private_chats'}});
 
+const loadUserList = async () => {
+	try {
+		const data = await fs.readFileSync(path.resolve('userList.json'));
+		userList = JSON.parse(data);
+		console.log('loadUserList userList')
+	} catch (error) {
+		console.error('Ошибка при загрузке userList:', error);
+	}
+};
+
+// Сохранение userList в JSON файл
+const saveUserList = () => {
+	try {
+		fs.writeFileSync(path.resolve('userList.json'), JSON.stringify(userList, null, 2));
+	} catch (error) {
+		console.error('Ошибка при сохранении userList:', error);
+	}
+};
+
+loadUserList()
+
 // Обработка команды /start
-bot.command('start', async (ctx) => await startBot(ctx));
+bot.command('start', async (ctx) => {
+	await startBot(ctx);
+});
 
 // Функция для управления сессиями
 const getSession = chatId => {
@@ -95,13 +121,13 @@ const startBot = async (ctx) => {
 	}
 }
 
-const simpleChooseReviewers = async (ctx, message, authorNick) => {
+const simpleChooseReviewers = async (ctx, message, authorNick, error) => {
 	// Выбор двух случайных ревьюверов
 	const availableReviewers = userList.filter(user => user.messengerNick !== authorNick).filter(user => !excludedUsers.includes(user.messengerNick));
 	const reviewers = getRandomElements(availableReviewers, 2);
 	const reviewerMentions = reviewers.map(reviewer => reviewer.messengerNick).join(' и ');
 	
-	await ctx.reply(getEveningMessage(`Назначены ревьюверы(сбой подключения к gitlab)(: ${reviewerMentions}`), {
+	await ctx.reply(getEveningMessage(`Назначены ревьюверы(${error})(: ${reviewerMentions}`), {
 		reply_to_message_id: ctx.message.message_id, parse_mode: "HTML", disable_web_page_preview: true
 	});
 }
@@ -114,8 +140,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 	
 	console.log('Обработка MR:', mrLinks, authorNick);
 	let allAnswers = '';
+	let error = '';
 	let success = false; // Флаг успешного выполнения
-	if(mrLinks.length > 4) {
+	if (mrLinks.length > 4) {
 		console.log('message mrLinks.length > 4')
 		await ctx.reply(getRandomMessage(manyMrPhrases));
 	}
@@ -132,11 +159,10 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				const {data: projectSearchUrlData, status: projectSearchUrlStatus} = await axiosInstance.get(projectSearchUrl);
 				
 				if (projectSearchUrlStatus !== 200) {
-					console.log(131)
+					error = 'не получены данные gitlab'
 					return false;
 				}
 				console.log('projectName', projectName)
-				// console.log('projectSearchUrlData', projectSearchUrlData)
 				let reallyProject = null;
 				for (const project of projectSearchUrlData) {
 					if (project?.path_with_namespace?.toLowerCase()?.includes('andrey.singaevskiy') || project?.path_with_namespace?.toLowerCase()?.includes('bpmsoft')) {
@@ -152,19 +178,20 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				const {data: mrStatusResponse, status: mrStatusStatus} = await axiosInstance.get(mrStatusUrl);
 				
 				if (mrStatusStatus !== 200 || mrStatusStatus === 404) {
-					console.log(150)
+					error = 'не получен статус МРа в gitlab'
 					return false;
 				}
 				
 				const mergeRequestTitle = mrStatusResponse.title;
 				const mergeRequestState = mrStatusResponse.state;
 				console.log('mergeRequestTitle', mergeRequestTitle)
-				if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
-					allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Апруверы не назначаются на MRы в статусе 'Draft'🚨\n`;
-					console.log('allAnswers', allAnswers)
-					success = true;
-					continue;
-				}
+				
+				// if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
+				// 	allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Апруверы не назначаются на MRы в статусе 'Draft'🚨\n`;
+				// 	console.log('allAnswers', allAnswers)
+				// 	success = true;
+				// 	continue;
+				// }
 				
 				if (mergeRequestState?.toLowerCase() === "merged") {
 					allAnswers += `\n${mrUrl}\nMR уже влит.\n`;
@@ -180,9 +207,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				console.log('projectId', projectId)
 				const approvalRulesUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approval_rules`;
 				const {data: approvalRulesUrlResponse, status: approvalRulesUrlStatus} = await axiosInstance.get(approvalRulesUrl);
-				
+				console.log('approvalRulesUrlResponse', approvalRulesUrlResponse)
 				if (approvalRulesUrlStatus !== 200) {
-					console.log(176)
+					error = 'не получены апруверы в gitlab'
 					return false;
 				}
 				
@@ -228,7 +255,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				}
 				
 				if (simpleApprovers.length > 0) {
-					let remainingApprovers = simpleApprovers.filter(user => user.username !== selectedLeadNick);
+					let remainingApprovers = simpleApprovers.filter(user => user.gitlabName !== selectedLeadNick);
 					if (remainingApprovers.length > 0) {
 						const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
 						selectedCheckMrNick = userList.find(user => user.gitlabName === selectedCheckMr.username).messengerNick;
@@ -239,7 +266,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				
 				if (!selectedLeadNick) {
 					selectedLeadNick = selectedCheckMrNick;
-					let remainingApprovers = simpleApprovers.filter(user => user.username !== selectedCheckMrNick);
+					let remainingApprovers = simpleApprovers.filter(user => user.gitlabName !== selectedCheckMrNick);
 					if (remainingApprovers.length > 0) {
 						const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
 						selectedCheckMrNick = userList.find(user => user.gitlabName === selectedCheckMr.username).messengerNick;
@@ -249,8 +276,8 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 				allAnswers += `\n${mrUrl}\nНазначены ревьюверы (на основе данных gitlab): ${selectedLeadNick} и ${selectedCheckMrNick}${leadUnavailableMessage}\n`;
 				success = true; // Устанавливаем флаг успешного выполнения
 			}
-		} catch (error) {
-			console.error('Ошибка при подключении к GitLab:');
+		} catch (errors) {
+			error = 'не получены апруверы в gitlab'
 			return false; // Если произошла ошибка, возвращаем false
 		}
 	}
@@ -261,9 +288,15 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 			parse_mode: "HTML",
 			disable_web_page_preview: true
 		});
-		return true; // Возвращаем true, если удалось успешно выполнить назначение ревьюверов
+		return {
+			status: true, // Возвращаем true, если удалось успешно выполнить назначение ревьюверов
+			error: null
+		};
 	} else {
-		return false; // Возвращаем false, если не удалось выполнить назначение
+		return {
+			status: false, // Возвращаем false, если не удалось выполнить назначение ревьюверов
+			error // кидаем ошибку
+		};
 	}
 }
 
@@ -289,14 +322,14 @@ const assignReviewers = async (ctx, message, authorNick) => {
 	}
 	
 	// Пробуем получить ревьюверов через GitLab
-	const gitlabSuccess = await checkMergeRequestByGitlab(ctx, message, authorNick);
-	if (gitlabSuccess) {
+	const {error, status} = await checkMergeRequestByGitlab(ctx, message, authorNick);
+	
+	if (status) {
 		return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
 	}
 	
-	console.log('Если нет соединения с GitLab.');
 	// Если нет соединения с GitLab, используем резервный метод
-	await simpleChooseReviewers(ctx, message, authorNick);
+	await simpleChooseReviewers(ctx, message, authorNick, error);
 };
 
 
@@ -338,6 +371,7 @@ bot.on('msg:text', async (ctx) => {
 	
 	if (!exists) {
 		userList.push({messengerNick: telegramNick, gitlabName: gitlabNick});
+		saveUserList(); // Сохранение изменений в файл
 		await ctx.reply(`Разработчик ${telegramNick} добавлен в список с GitLab ником ${gitlabNick}.`);
 	} else {
 		await ctx.reply(`Разработчик ${telegramNick} уже в списке.`);
@@ -405,6 +439,7 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
 			switch (action) {
 				case 'remove_user':
 					userList.splice(userIndex, 1);
+					saveUserList(); // Сохранение изменений в файл
 					if (excludedUsers.includes(username)) {
 						excludedUsers.splice(excludedUsers.indexOf(username), 1);
 					}
