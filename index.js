@@ -18,11 +18,15 @@ const bot = new Bot(TOKEN);
 
 // Все разработчики
 let userList = [];
+
 // Список временно не активных разработчиков
 let excludedUsers = [];
 
 // Глобальная переменная для хранения состояния сессий
 const sessions = {};
+
+// Глобальная переменная для хранения предложений по боту от лидов
+let suggestions = [];
 
 // Глобальная переменная для хранения состояния логирования
 let loggingEnabled = true;
@@ -33,7 +37,7 @@ bot.api.setMyCommands(
     { command: 'help', description: 'WTF' },
     { command: 'chatid', description: 'Получить ID чата' },
   ],
-  { scope: { type: 'all_chat_administrators' } },
+  { scope: { type: 'all_private_chats' } },
 );
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
@@ -50,7 +54,7 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
       });
     }
   } catch (error) {
-    console.error('Failed to send service message:', error);
+    await sendServiceMessage('Ошибка отправки сервисного сообщения в чат');
   }
 };
 
@@ -60,6 +64,7 @@ const loadUserList = async () => {
     userList = JSON.parse(data);
   } catch (error) {
     console.error('Ошибка при загрузке userList:', error);
+    await sendServiceMessage('Ошибка чтения всех разработчиков из файла');
   }
 };
 
@@ -68,31 +73,40 @@ const loadExcludedUsers = async () => {
     const data = await fs.readFileSync(path.resolve('excludedUsers.json'));
     excludedUsers = JSON.parse(data);
   } catch (error) {
-    console.error('Ошибка при загрузке excludedUsers:', error);
+    await sendServiceMessage('Ошибка при чтении исключенных разработчиков из файла');
   }
 };
 
 // Сохранение userList в JSON файл
-const saveUserList = () => {
+const saveUserList = async () => {
   try {
     fs.writeFileSync(path.resolve('userList.json'), JSON.stringify(userList, null, 2));
   } catch (error) {
-    console.error('Ошибка при сохранении userList:', error);
+    await sendServiceMessage('Ошибка при сохранении разработчика в файл');
   }
 };
 
 // Сохранение excludedUsers в JSON файл
-const saveExcludedUsers = () => {
+const saveExcludedUsers = async () => {
   try {
     fs.writeFileSync(path.resolve('excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
   } catch (error) {
-    console.error('Ошибка при сохранении excludedUsers:', error);
+    await sendServiceMessage('Ошибка при сохранении исключенного разработчика в файл');
+  }
+};
+
+const loadSuggestions = async () => {
+  try {
+    const data = fs.readFileSync(path.resolve('suggestions.json'));
+    suggestions = JSON.parse(data);
+  } catch (error) {
+    await sendServiceMessage('Ошибка чтения предложений из файла');
   }
 };
 
 const addUser = async (ctx, messengerNick, gitlabName) => {
   userList.push({ messengerNick, gitlabName });
-  saveUserList();
+  await saveUserList();
   await sendServiceMessage(
     `Разработчик ${messengerNick} - ${gitlabName} добавлен в список разработчиков✅😊`,
     ctx.from.id,
@@ -102,6 +116,7 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
 
 loadUserList();
 loadExcludedUsers();
+loadSuggestions();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -151,6 +166,10 @@ const showMenu = async (ctx) => {
     } else {
       keyboard.row().text('🔔 Включить логирование', 'enable_logging');
     }
+  }
+
+  if ((ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() || ctx.chat.type === 'private') && (await isAdmin(ctx))) {
+    keyboard.row().text('💡 Предложения по доработке', 'suggestions');
   }
 
   await ctx.reply('Выберите действие:', {
@@ -507,6 +526,14 @@ bot.command('chatid', async (ctx) => {
   }
 });
 
+// bot.command('suggestions', async (ctx) => {
+// 	if (await isAdmin(ctx)) {
+// 		console.log('suggestions')
+// 	} else {
+// 		await ctx.reply('У вас нет прав для управления этим ботом.');
+// 	}
+// });
+
 bot.on(':voice', async (ctx) => {
   await ctx.reply('Ай нехорошо голосовые в чат отправлять!🥴', { reply_to_message_id: ctx.message.message_id });
 });
@@ -526,6 +553,26 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 // Обработка добавления пользователя
 bot.on('msg:text', async (ctx) => {
   const session = getSession(ctx.chat.id);
+
+  if (session.awaitingSuggestionsInput) {
+    const suggestion = ctx.message.text;
+
+    // Сохраняем предложение в файл JSON
+    suggestions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username,
+      suggestion,
+      timestamp: new Date().toISOString(),
+    });
+
+    fs.writeFileSync(path.resolve('suggestions.json'), JSON.stringify(suggestions, null, 2));
+
+    await ctx.reply('Спасибо! Ваши пожелания переданы!😘');
+    session.awaitingSuggestionsInput = false;
+    await showMenu(ctx);
+    return;
+  }
+
   // если не нажата кнопка добавления пользователя
   if (!session.awaitingUserInput) return;
 
@@ -566,7 +613,7 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
       switch (action) {
         case 'remove_user':
           userList.splice(userIndex, 1);
-          saveUserList(); // Сохранение изменений в файл
+          await saveUserList();
           if (loggingEnabled) {
             await sendServiceMessage(
               `Разработчик ${username} УДАЛЕН из списка разработчиков❌🚨🚨🚨`,
@@ -617,6 +664,11 @@ bot.callbackQuery(/.*/, async (ctx) => {
     return;
   }
 
+  // Если бот ждет текст, но пользователь нажал другую кнопку, сбрасываем ожидание
+  if (session.awaitingSuggestionsInput) {
+    session.awaitingSuggestionsInput = false;
+  }
+
   switch (action) {
     case 'list_users':
       await listUsers(ctx);
@@ -655,6 +707,18 @@ bot.callbackQuery(/.*/, async (ctx) => {
       break;
     case 'help':
       await helpCommand(ctx);
+      break;
+    case 'suggestions':
+      session.awaitingSuggestionsInput = true;
+      const cancelSuggestionsKeyboard = new InlineKeyboard().text('Отмена', 'cancel_suggestions');
+      await ctx.reply('Напишите Ваши пожелания по доработке. Я их передам хозяину. 😈', {
+        reply_markup: cancelSuggestionsKeyboard,
+      });
+      break;
+    case 'cancel_suggestions':
+      session.awaitingSuggestionsInput = false;
+      await ctx.reply('Действие отменено.');
+      await showMenu(ctx);
       break;
   }
 });
