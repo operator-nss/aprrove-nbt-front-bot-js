@@ -9,7 +9,6 @@ import path from 'path';
 dotenv.config();
 
 const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
-const GITLAB_TOKEN = process.env.GITLAB_ACCESS_TOKEN; // GitLab Access Token
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
 const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отладки бота
@@ -490,10 +489,22 @@ bot.command('start', async (ctx) => {
 });
 
 bot.command('start', async (ctx) => await startBot(ctx));
-bot.command('help', async (ctx) => await helpCommand(ctx));
+
+bot.command('help', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    await helpCommand(ctx);
+  } else {
+    await ctx.reply('У вас нет прав для управления этим ботом.');
+  }
+});
+
 bot.command('chatid', async (ctx) => {
-  const chatId = ctx.chat.id;
-  await ctx.reply(`Chat ID: ${chatId}`);
+  if (await isAdmin(ctx)) {
+    const chatId = ctx.chat.id;
+    await ctx.reply(`Chat ID: ${chatId}`);
+  } else {
+    await ctx.reply('У вас нет прав для управления этим ботом.');
+  }
 });
 
 bot.on(':voice', async (ctx) => {
