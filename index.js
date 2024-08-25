@@ -5,6 +5,7 @@ import { manyMrPhrases } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
+import moment from 'moment-timezone';
 
 dotenv.config();
 
@@ -12,6 +13,7 @@ const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
 const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отладки бота
+const TG_TEAM_CHAT_ID = process.env.TG_TEAM_CHAT_ID; // ID чата команды в телеграмме
 
 // Создаем бота
 const bot = new Bot(TOKEN);
@@ -31,13 +33,19 @@ let suggestions = [];
 // Глобальная переменная для хранения состояния логирования
 let loggingEnabled = true;
 
+// Счетчик МРов
+let mrCounter = 0;
+// Дата последнего сброса МРов
+let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
+
 bot.api.setMyCommands(
   [
     { command: 'start', description: 'Запуск бота' },
     { command: 'help', description: 'WTF' },
     { command: 'chatid', description: 'Получить ID чата' },
+    { command: 'mrcount', description: 'Узнать сколько Мров сделали за этот день' },
   ],
-  { scope: { type: 'all_private_chats' } },
+  { scope: { type: 'all_chat_administrators' } },
 );
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
@@ -56,6 +64,54 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
   } catch (error) {
     await sendServiceMessage('Ошибка отправки сервисного сообщения в чат');
   }
+};
+
+const loadMrCounter = async () => {
+  try {
+    const data = await JSON.parse(fs.readFileSync(path.resolve('mrCounter.json')));
+    mrCounter = data.mrCounter || 0;
+    lastResetDate = data.lastResetDate || moment().tz('Europe/Moscow').format('YYYY-MM-DD');
+  } catch (error) {
+    await sendServiceMessage('Ошибка при загрузке счетчика MR');
+  }
+};
+
+const saveMrCounter = async () => {
+  try {
+    const data = {
+      mrCounter,
+      lastResetDate,
+    };
+    fs.writeFileSync(path.resolve('mrCounter.json'), JSON.stringify(data, null, 2));
+  } catch (error) {
+    await sendServiceMessage('Ошибка при сохранении счетчика MR');
+  }
+};
+
+const resetMrCounterIfNeeded = async () => {
+  const currentDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD');
+  let savedData;
+  try {
+    savedData = JSON.parse(fs.readFileSync(path.resolve('mrCounter.json')));
+  } catch (error) {
+    await sendServiceMessage('Ошибка при чтении mrCounter.json');
+    return;
+  }
+  const savedDate = savedData.lastResetDate || '';
+  // Если текущая дата не совпадает с датой в файле, сбрасываем счетчик
+  if (currentDate !== savedDate) {
+    mrCounter = 0;
+    lastResetDate = currentDate;
+    await saveMrCounter();
+  }
+};
+
+const incrementMrCounter = async (ctx, count = 1) => {
+  // Работает только для ID чата команды
+  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
+  await resetMrCounterIfNeeded();
+  mrCounter += count;
+  await saveMrCounter();
 };
 
 const loadUserList = async () => {
@@ -117,6 +173,8 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
 loadUserList();
 loadExcludedUsers();
 loadSuggestions();
+loadMrCounter();
+resetMrCounterIfNeeded();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -185,14 +243,14 @@ const startBot = async (ctx) => {
   }
 };
 
-const simpleChooseReviewers = async (ctx, message, authorNick) => {
+const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   // Выбор двух случайных ревьюверов
   const availableReviewers = userList
     .filter((user) => user.messengerNick !== authorNick)
     .filter((user) => !excludedUsers.includes(user.messengerNick));
   const reviewers = getRandomElements(availableReviewers, 2);
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
-
+  await incrementMrCounter(ctx, countMrs); // Одобавляем + countMrs к счетчику МРов
   await ctx.reply(getEveningMessage(`Назначены ревьюверы: ${reviewerMentions}`), {
     reply_to_message_id: ctx.message.message_id,
     parse_mode: 'HTML',
@@ -259,7 +317,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
 
         if (!!mergeRequestPipelineFailed) {
-          allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема, пожалуйста!🚨\n';
+          allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
         }
 
         if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
@@ -359,6 +417,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         ).messengerNick;
 
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы: ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
+        await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
@@ -408,10 +467,12 @@ const assignReviewers = async (ctx, message, authorNick) => {
         disable_web_page_preview: true,
       },
     );
+    await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
     await sendServiceMessage(`${message}.\n\nПочему-то только один ревьювер доступен. Просьба проверить😊`);
     return;
   }
 
+  // Проверяем что в сообщении именно МР а не левая ссылка
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
   if (!mrLinks || !mrLinks.length) {
     return await sendServiceMessage(`${message}\n\nКакая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
@@ -425,7 +486,7 @@ const assignReviewers = async (ctx, message, authorNick) => {
   }
 
   // Если нет соединения с GitLab, используем резервный метод
-  await simpleChooseReviewers(ctx, message, authorNick);
+  await simpleChooseReviewers(ctx, message, authorNick, mrLinks.length);
 };
 
 const excludeUser = async (ctx, username) => {
@@ -531,6 +592,15 @@ bot.command('chatid', async (ctx) => {
     await ctx.reply(`Chat ID: ${chatId}`);
   } else {
     await ctx.reply('У вас нет прав для управления этим ботом.');
+  }
+});
+
+bot.command('mrcount', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    await resetMrCounterIfNeeded();
+    await ctx.reply(`Количество MR за текущие сутки: ${mrCounter}`);
+  } else {
+    await ctx.reply('У вас нет прав для выполнения этой команды.');
   }
 });
 
