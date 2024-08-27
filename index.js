@@ -120,7 +120,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога 20 сообщений
-  if (mrCounter % 20 === 0) {
+  if (mrCounter % 15 === 0) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
@@ -137,7 +137,6 @@ const loadUserList = async () => {
     const data = await fs.readFileSync(path.resolve('userList.json'));
     userList = JSON.parse(data);
   } catch (error) {
-    console.error('Ошибка при загрузке userList:', error);
     await sendServiceMessage('Ошибка чтения всех разработчиков из файла');
   }
 };
