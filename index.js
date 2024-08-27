@@ -12,6 +12,7 @@ import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
 import moment from 'moment-timezone';
+import jiraInstance from './jiraInstance.js';
 
 dotenv.config();
 
@@ -19,7 +20,8 @@ const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
 const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отладки бота
-const TG_TEAM_CHAT_ID = process.env.TG_TEAM_CHAT_ID; // ID чата команды в телеграмме
+const TG_FRONT_TEAM_CHAT_ID = process.env.TG_FRONT_TEAM_CHAT_ID; // ID чата команды в телеграмме
+const OWNER_ID = process.env.OWNER_ID; // ID разработчика бота
 
 // Создаем бота
 const bot = new Bot(TOKEN);
@@ -114,7 +116,7 @@ const resetMrCounterIfNeeded = async () => {
 
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
+  if (ctx.chat.id.toString() !== TG_FRONT_TEAM_CHAT_ID.toString()) return;
   await resetMrCounterIfNeeded();
   mrCounter += count;
   await saveMrCounter();
@@ -168,6 +170,7 @@ const saveExcludedUsers = async () => {
   }
 };
 
+// Загрузка предлодений из файла
 const loadSuggestions = async () => {
   try {
     const data = fs.readFileSync(path.resolve('suggestions.json'));
@@ -186,6 +189,17 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
     ctx.from.username,
   );
 };
+
+// const getJiraTaskStatus = async (issueKey, mergeRequest) => {
+//   try {
+//     console.log('getJiraTaskStatus')
+//     const response = await jiraInstance.get(`/rest/api/3/issue/${issueKey}`);
+//     console.log(response)
+//   } catch (error) {
+//     console.log(error)
+//     await sendServiceMessage(`Ошибка получения статуса MR ${mergeRequest} из JIRA`);
+//   }
+// };
 
 loadUserList();
 loadExcludedUsers();
@@ -335,6 +349,14 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
+
+        // const jiraTask = mergeRequestTitle.match(/NBT-(\d+)/);
+        //
+        // if (jiraTask) {
+        //   const jiraTaskNumber = jiraTask[1];
+        //   console.log(jiraTaskNumber);
+        //   await getJiraTaskStatus(jiraTaskNumber, mrUrl)
+        // }
 
         if (!!mergeRequestPipelineFailed) {
           allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
@@ -677,6 +699,11 @@ bot.on('msg:text', async (ctx) => {
     await ctx.reply('Спасибо! Ваши пожелания переданы!😘');
     session.awaitingSuggestionsInput = false;
     await showMenu(ctx);
+    // Отправка сообщения разработчику в личку
+    await bot.api.sendMessage(
+      OWNER_ID,
+      `Новое предложение по боту от ${ctx.from.username || ctx.from.first_name}: ${suggestion}`,
+    );
     return;
   }
 
