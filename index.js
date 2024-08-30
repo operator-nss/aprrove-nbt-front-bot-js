@@ -6,10 +6,12 @@ import dotenv from 'dotenv';
 import {
   checkMr,
   formatDate,
+  formatDateTime,
   getEveningMessage,
   getRandomElements,
   getRandomPhraseWithCounter,
   getUserTimeMessage,
+  timeZone,
 } from './helpers.js';
 import { calendarOptions, manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
@@ -137,26 +139,108 @@ const scheduleJob = (job) => {
   const notifyDayOf = `${username}_notify_day_of`;
   const activateAtNight = `${username}_activate_at_night`;
 
-  // Запланировать уведомление за день до включения
-  schedule.scheduleJob(
-    notifyDayBefore,
-    moment(includeDate).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
-    () => {
-      bot.api.sendMessage(targetServiceChatId, `Завтра выходит ${username}`);
-    },
-  );
+  if (isDevelopmentMode) {
+    // console.log('notifyDayBefore', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).format());
+    // console.log('notifyDayOf', moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).format());
+    // console.log('activateAtNight', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).format());
+    // Если режим разработки, задачи запланированы через 1, 2 и 3 минуты от текущего времени
+    const now = new Date();
+    // const fiveSecondsLater = new Date(now.getTime() + 500 * 1000); // 5 секунд спустя
 
-  // Запланировать уведомление в день включения в 10:15
-  schedule.scheduleJob(notifyDayOf, moment(includeDate).set({ hour: 10, minute: 15 }).toDate(), () => {
-    bot.api.sendMessage(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+    const fiveSecondsLater = moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(); // 5 секунд спустя
+    // const tenSecondsLater = new Date(now.getTime() + 1000 * 1000); // 10 секунд спустя
+    const tenSecondsLater = moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(); // 10 секунд спустя
+    // const fifteenSecondsLater = new Date(now.getTime() + 1500 * 1000); // 15 секунд спустя
+    const fifteenSecondsLater = moment
+      .tz(includeDate, timeZone)
+      .subtract(1, 'days')
+      .set({ hour: 21, minute: 0 })
+      .toDate(); // 15 секунд спустя
+
+    schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, () => {
+      bot.api.sendMessage(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
+    });
+
+    schedule.scheduleJob(notifyDayOf, tenSecondsLater, async () => {
+      await includeUserByDate(username, false);
+      await bot.api.sendMessage(OWNER_ID, `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`);
+      await bot.api.sendMessage(
+        DEV_CHAT_ID,
+        `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`,
+      );
+    });
+
+    schedule.scheduleJob(activateAtNight, fifteenSecondsLater, async () => {
+      await bot.api.sendMessage(
+        DEV_CHAT_ID,
+        `Тестовое уведомление: Всем привет! ${username} вышел на работу и может быть назначен ревьювером!`,
+      );
+    });
+  } else {
+    // Запланировать уведомление за день до включения
+    schedule.scheduleJob(
+      notifyDayBefore,
+      moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
+      () => {
+        bot.api.sendMessage(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
+      },
+    );
+
+    // Запланировать уведомление в день включения в 10:15
+    schedule.scheduleJob(notifyDayOf, moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(), () => {
+      bot.api.sendMessage(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+    });
+
+    // Запланировать включение разработчика в 21:00 за день до includeDate
+    schedule.scheduleJob(
+      activateAtNight,
+      moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(),
+      async () => {
+        await includeUserByDate(username, false);
+        await bot.api.sendMessage(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
+        await bot.api.sendMessage(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
+      },
+    );
+  }
+};
+
+const showScheduledJobs = async (ctx) => {
+  const jobs = Object.values(schedule.scheduledJobs);
+  if (jobs.length === 0) {
+    await ctx.reply('Нет запланированных задач в планировщике.');
+    return;
+  }
+
+  let message = 'Запланированные задачи:\n';
+
+  jobs.forEach((job) => {
+    const jobName = job.name;
+    const nextInvocation = job.nextInvocation(); // Получаем следующую дату выполнения
+    const [username, taskType] = jobName.split('_');
+
+    if (!nextInvocation) return; // Пропускаем задачи без запланированного времени выполнения
+
+    // Преобразуем nextInvocation в объект Date
+    const nextInvocationDate = new Date(nextInvocation.toString());
+
+    switch (taskType) {
+      case 'activate':
+        message += `- Активация ревьювера с ником ${username} ${formatDateTime(nextInvocationDate)}.\n`;
+        break;
+      case 'notify':
+        if (jobName.includes('day_before')) {
+          message += `- Уведомление на день раньше в сервисную группу ${formatDateTime(nextInvocationDate)} о том, что ревьювер ${username} будет активирован завтра.\n`;
+        } else if (jobName.includes('day_of')) {
+          message += `- Уведомление команды ${formatDateTime(nextInvocationDate)} о том, что активирован ревьювер с ником ${username}.\n`;
+        }
+        break;
+      default:
+        message += `- Запланировано на ${formatDateTime(nextInvocationDate)}.\n`;
+        break;
+    }
   });
 
-  // Запланировать включение разработчика в 21:00
-  schedule.scheduleJob(activateAtNight, moment(includeDate).set({ hour: 21, minute: 0 }).toDate(), async () => {
-    await includeUserByDate(username, false);
-    await bot.api.sendMessage(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
-    await bot.api.sendMessage(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
-  });
+  await ctx.reply(message);
 };
 
 const loadDevelopmentMode = async () => {
@@ -824,16 +908,7 @@ bot.command('mrcount', async (ctx) => {
 
 // Например, добавить вызов в команде /showjobs
 bot.command('showjobs', async (ctx) => {
-  const jobs = Object.keys(schedule.scheduledJobs);
-  if (jobs.length === 0) {
-    await ctx.reply('Нет запланированных задач.');
-  } else {
-    let message = 'Запланированные задачи:\n';
-    jobs.forEach((jobName) => {
-      message += `- ${jobName}\n`;
-    });
-    await ctx.reply(message);
-  }
+  await showScheduledJobs(ctx);
 });
 
 bot.on(':voice', async (ctx) => {
