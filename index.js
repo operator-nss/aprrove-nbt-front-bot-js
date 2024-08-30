@@ -307,17 +307,6 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
   );
 };
 
-// const getJiraTaskStatus = async (issueKey, mergeRequest) => {
-//   try {
-//     console.log('getJiraTaskStatus')
-//     const response = await jiraInstance.get(`/rest/api/3/issue/${issueKey}`);
-//     console.log(response)
-//   } catch (error) {
-//     console.log(error)
-//     await sendServiceMessage(`Ошибка получения статуса MR ${mergeRequest} из JIRA`);
-//   }
-// };
-
 loadDevelopmentMode();
 loadUserList();
 loadExcludedUsers();
@@ -481,14 +470,6 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
-
-        // const jiraTask = mergeRequestTitle.match(/NBT-(\d+)/);
-        //
-        // if (jiraTask) {
-        //   const jiraTaskNumber = jiraTask[1];
-        //   console.log(jiraTaskNumber);
-        //   await getJiraTaskStatus(jiraTaskNumber, mrUrl)
-        // }
 
         if (!!mergeRequestPipelineFailed) {
           allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
