@@ -46,6 +46,12 @@ let mrCounter = 0;
 // Дата последнего сброса МРов
 let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
 
+// Переменная для хранения состояния режима разработки
+let isDevelopmentMode = false;
+
+// ID чата разработчика
+const DEV_CHAT_ID = process.env.DEV_CHAT_ID; // ID чата разработчика в Телеграм
+
 bot.api.setMyCommands(
   [
     { command: 'start', description: 'Запуск бота' },
@@ -58,14 +64,17 @@ bot.api.setMyCommands(
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
   try {
-    if (!userId && !username) return await bot.api.sendMessage(SERVICE_CHAT_ID, message);
+    // Определяем целевой чат в зависимости от режима разработки
+    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
+
+    if (!userId && !username) return await bot.api.sendMessage(targetChatId, message);
 
     if (ignoreLogging || loggingEnabled) {
       // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
-      const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}`;
+      const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}, ${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`;
 
       // Отправляем сообщение в сервисный чат
-      await bot.api.sendMessage(SERVICE_CHAT_ID, fullMessage, {
+      await bot.api.sendMessage(targetChatId, fullMessage, {
         disable_web_page_preview: true,
       });
     }
@@ -74,9 +83,29 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
   }
 };
 
+const loadDevelopmentMode = async () => {
+  try {
+    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/devMode.json')));
+    isDevelopmentMode = data.isDevelopmentMode || false;
+  } catch (error) {
+    await sendServiceMessage('Ошибка при загрузке состояния режима разработки');
+  }
+};
+
+const saveDevelopmentMode = async () => {
+  try {
+    const data = {
+      isDevelopmentMode,
+    };
+    fs.writeFileSync(path.resolve('bd/devMode.json'), JSON.stringify(data, null, 2));
+  } catch (error) {
+    await sendServiceMessage('Ошибка при сохранении состояния режима разработки');
+  }
+};
+
 const loadMrCounter = async () => {
   try {
-    const data = await JSON.parse(fs.readFileSync(path.resolve('mrCounter.json')));
+    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
     mrCounter = data.mrCounter || 0;
     lastResetDate = data.lastResetDate || moment().tz('Europe/Moscow').format('YYYY-MM-DD');
   } catch (error) {
@@ -90,7 +119,7 @@ const saveMrCounter = async () => {
       mrCounter,
       lastResetDate,
     };
-    fs.writeFileSync(path.resolve('mrCounter.json'), JSON.stringify(data, null, 2));
+    fs.writeFileSync(path.resolve('bd/mrCounter.json'), JSON.stringify(data, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении счетчика MR');
   }
@@ -100,7 +129,7 @@ const resetMrCounterIfNeeded = async () => {
   const currentDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD');
   let savedData;
   try {
-    savedData = JSON.parse(fs.readFileSync(path.resolve('mrCounter.json')));
+    savedData = JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
   } catch (error) {
     await sendServiceMessage('Ошибка при чтении mrCounter.json');
     return;
@@ -136,7 +165,7 @@ const sendMotivationalMessage = async (ctx) => {
 
 const loadUserList = async () => {
   try {
-    const data = await fs.readFileSync(path.resolve('userList.json'));
+    const data = await fs.readFileSync(path.resolve('bd/userList.json'));
     userList = JSON.parse(data);
   } catch (error) {
     await sendServiceMessage('Ошибка чтения всех разработчиков из файла');
@@ -145,7 +174,7 @@ const loadUserList = async () => {
 
 const loadExcludedUsers = async () => {
   try {
-    const data = await fs.readFileSync(path.resolve('excludedUsers.json'));
+    const data = await fs.readFileSync(path.resolve('bd/excludedUsers.json'));
     excludedUsers = JSON.parse(data);
   } catch (error) {
     await sendServiceMessage('Ошибка при чтении исключенных разработчиков из файла');
@@ -155,7 +184,7 @@ const loadExcludedUsers = async () => {
 // Сохранение userList в JSON файл
 const saveUserList = async () => {
   try {
-    fs.writeFileSync(path.resolve('userList.json'), JSON.stringify(userList, null, 2));
+    fs.writeFileSync(path.resolve('bd/userList.json'), JSON.stringify(userList, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении разработчика в файл');
   }
@@ -164,7 +193,7 @@ const saveUserList = async () => {
 // Сохранение excludedUsers в JSON файл
 const saveExcludedUsers = async () => {
   try {
-    fs.writeFileSync(path.resolve('excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
+    fs.writeFileSync(path.resolve('bd/excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении исключенного разработчика в файл');
   }
@@ -173,7 +202,7 @@ const saveExcludedUsers = async () => {
 // Загрузка предлодений из файла
 const loadSuggestions = async () => {
   try {
-    const data = fs.readFileSync(path.resolve('suggestions.json'));
+    const data = fs.readFileSync(path.resolve('bd/suggestions.json'));
     suggestions = JSON.parse(data);
   } catch (error) {
     await sendServiceMessage('Ошибка чтения предложений из файла');
@@ -206,6 +235,7 @@ loadExcludedUsers();
 loadSuggestions();
 loadMrCounter();
 resetMrCounterIfNeeded();
+loadDevelopmentMode();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -255,9 +285,23 @@ const showMenu = async (ctx) => {
     } else {
       keyboard.row().text('🔔 Включить логирование', 'enable_logging');
     }
+
+    if (ctx.from.id.toString() === OWNER_ID) {
+      // Проверяем, что ID отправителя совпадает с OWNER_ID
+      if (isDevelopmentMode) {
+        keyboard.row().text('🚧 Выключить режим разработки', 'disable_dev_mode');
+      } else {
+        keyboard.row().text('🚧 Включить режим разработки', 'enable_dev_mode');
+      }
+    }
   }
 
-  if ((ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() || ctx.chat.type === 'private') && (await isAdmin(ctx))) {
+  if (
+    (ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() ||
+      ctx.chat.id.toString() === DEV_CHAT_ID.toString() ||
+      ctx.chat.type === 'private') &&
+    (await isAdmin(ctx))
+  ) {
     keyboard.row().text('💡 Предложения по доработке', 'suggestions');
   }
 
@@ -610,7 +654,12 @@ const helpCommand = async (ctx) => {
     '<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Ревьюверы выбираются только из списка активных сотрудников\n\n' +
     '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).';
 
-  if ((ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() || ctx.chat.type === 'private') && (await isAdmin(ctx))) {
+  if (
+    (ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() ||
+      ctx.chat.id.toString() === DEV_CHAT_ID.toString() ||
+      ctx.chat.type === 'private') &&
+    (await isAdmin(ctx))
+  ) {
     helpText += '\n\n<b><i>Предложения по доработке</i></b> - Отправить разработчику текст с пожеланием доработки бота';
   }
   await ctx.reply(helpText, { parse_mode: 'HTML' });
@@ -694,7 +743,7 @@ bot.on('msg:text', async (ctx) => {
       timestamp: new Date().toISOString(),
     });
 
-    fs.writeFileSync(path.resolve('suggestions.json'), JSON.stringify(suggestions, null, 2));
+    fs.writeFileSync(path.resolve('bd/suggestions.json'), JSON.stringify(suggestions, null, 2));
 
     await ctx.reply('Спасибо! Ваши пожелания переданы!😘');
     session.awaitingSuggestionsInput = false;
@@ -830,6 +879,20 @@ bot.callbackQuery(/.*/, async (ctx) => {
       loggingEnabled = false;
       await ctx.reply('Логирование выключено.');
       await sendServiceMessage(`Логирование в группу отладки выключено❌`, ctx.from.id, ctx.from.username, true);
+      await showMenu(ctx);
+      break;
+    case 'enable_dev_mode':
+      isDevelopmentMode = true;
+      await saveDevelopmentMode();
+      await ctx.reply('Режим разработки включен.');
+      await sendServiceMessage(`Режим разработки включен🚧`, ctx.from.id, ctx.from.username, true);
+      await showMenu(ctx);
+      break;
+    case 'disable_dev_mode':
+      await ctx.reply('Режим разработки выключен.');
+      await sendServiceMessage(`Режим разработки выключен🚧`, ctx.from.id, ctx.from.username, true);
+      isDevelopmentMode = false;
+      await saveDevelopmentMode();
       await showMenu(ctx);
       break;
     case 'cancel':

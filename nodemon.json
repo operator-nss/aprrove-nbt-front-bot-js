@@ -1,3 +1,3 @@
 {
-  "ignore": ["userList.json", "excludedUsers.json", "suggestions.json", "mrCounter.json"]
+  "ignore": ["bd/userList.json", "bd/excludedUsers.json", "bd/suggestions.json", "bd/mrCounter.json", "bd/devMode.json"]
 }
