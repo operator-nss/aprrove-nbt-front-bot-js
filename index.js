@@ -8,7 +8,7 @@ import {
   getRandomPhraseWithCounter,
   getUserTimeMessage,
 } from './helpers.js';
-import { manyMrPhrases, motivationalMessages } from './constants.js';
+import { calendarOptions, manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
@@ -36,27 +36,7 @@ bot.use(
   }),
 );
 
-const calendar = new Calendar(bot, {
-  startWeekDay: 1, // Неделя начинается с понедельника
-  weekDayNames: ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'],
-  monthNames: [
-    'Январь',
-    'Февраль',
-    'Март',
-    'Апрель',
-    'Май',
-    'Июнь',
-    'Июль',
-    'Август',
-    'Сентябрь',
-    'Октябрь',
-    'Ноябрь',
-    'Декабрь',
-  ],
-  minDate: new Date(new Date().setDate(new Date().getDate() + 1)), // Минимальная дата - завтрашний день
-});
-
-// setup(bot);
+const calendar = new Calendar(bot, calendarOptions);
 
 // Все разработчики
 let userList = [];
@@ -955,6 +935,15 @@ bot.callbackQuery(/.*/, async (ctx) => {
 
   if (calendarData.isOpen && action.startsWith('calendar-telegram-date-')) {
     const dateText = action.split('-').slice(3).join('-'); // Извлекаем дату из данных
+    const selectedDate = moment(dateText, 'YYYY-MM-DD'); // Преобразуем в формат 'YYYY-MM-DD'
+    const minAllowedDate = moment().add(1, 'day').startOf('day'); // Завтрашний день без времени
+
+    // Проверяем, что выбранная дата не раньше завтрашнего дня
+    if (selectedDate.isBefore(minAllowedDate)) {
+      await ctx.answerCallbackQuery({ text: 'Выберите дату в будущем.', show_alert: true });
+      return; // Останавливаем выполнение, если выбрана дата в прошлом
+    }
+
     await ctx.reply(`Вы выбрали дату активации разработчика:\n ${formatDate(dateText)}`);
     calendarData.isOpen = false;
     // Здесь вызываем функцию для сохранения даты включения и автоматического включения разработчика

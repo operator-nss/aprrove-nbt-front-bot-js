@@ -1,3 +1,23 @@
+export const calendarOptions = {
+  startWeekDay: 1,
+  weekDayNames: ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'],
+  monthNames: [
+    'Январь',
+    'Февраль',
+    'Март',
+    'Апрель',
+    'Май',
+    'Июнь',
+    'Июль',
+    'Август',
+    'Сентябрь',
+    'Октябрь',
+    'Ноябрь',
+    'Декабрь',
+  ],
+  minDate: new Date(new Date().setDate(new Date().getDate() + 1)), // Минимальная дата - завтрашний день
+};
+
 // Список объектов для хранения соответствия между Мессенджером и GitLab никнеймами
 export const userList = [
   { messengerNick: '@FrontendMaestro', gitlabName: 'Aleksey.Sokolov' },
