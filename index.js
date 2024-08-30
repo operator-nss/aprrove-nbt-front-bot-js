@@ -176,7 +176,7 @@ const saveScheduledJobs = async (jobs) => {
 
 const loadDevelopmentMode = async () => {
   try {
-    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/scheduledJobs.json')));
+    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/developmentMode.json')));
     isDevelopmentMode = data.isDevelopmentMode || false;
   } catch (error) {
     await sendServiceMessage('Ошибка при загрузке состояния режима разработки');
@@ -188,7 +188,7 @@ const saveDevelopmentMode = async () => {
     const data = {
       isDevelopmentMode,
     };
-    fs.writeFileSync(path.resolve('bd/devMode.json'), JSON.stringify(data, null, 2));
+    fs.writeFileSync(path.resolve('bd/developmentMode.json'), JSON.stringify(data, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении состояния режима разработки');
   }
