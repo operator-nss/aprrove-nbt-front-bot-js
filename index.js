@@ -62,9 +62,6 @@ let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Тек
 // Переменная для хранения состояния режима разработки
 let isDevelopmentMode = false;
 
-// Словарь для хранения задач по каждому пользователю
-let scheduledJobs = [];
-
 let calendarData = {
   isOpen: false,
   userName: '',
@@ -76,6 +73,7 @@ bot.api.setMyCommands(
     { command: 'help', description: 'WTF' },
     { command: 'chatid', description: 'Получить ID чата' },
     { command: 'mrcount', description: 'Узнать сколько Мров сделали за этот день' },
+    { command: 'showjobs', description: 'Показать запланированные уведомления' },
   ],
   { scope: { type: 'all_chat_administrators' } },
 );
@@ -129,49 +127,36 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
   await ctx.answerCallbackQuery();
 });
 
-const loadScheduledJobs = async () => {
-  try {
-    const data = await fs.readFileSync(path.resolve('bd/scheduledJobs.json'));
-    scheduledJobs = JSON.parse(data);
-    console.log('scheduledJobs', scheduledJobs);
-    scheduledJobs.forEach((job) => {
-      scheduleJob(job);
-    });
-  } catch (error) {
-    await sendServiceMessage('Ошибка при чтении запланированных задач');
-    return [];
-  }
-};
-
 const scheduleJob = (job) => {
   const { username, includeDate } = job;
   const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_FRONT_TEAM_CHAT_ID;
   const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
 
+  // Уникальные имена задач для каждого события
+  const notifyDayBefore = `${username}_notify_day_before`;
+  const notifyDayOf = `${username}_notify_day_of`;
+  const activateAtNight = `${username}_activate_at_night`;
+
   // Запланировать уведомление за день до включения
-  schedule.scheduleJob(moment(includeDate).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(), () => {
-    bot.api.sendMessage(targetServiceChatId, `Завтра выходит ${username}`);
-  });
+  schedule.scheduleJob(
+    notifyDayBefore,
+    moment(includeDate).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
+    () => {
+      bot.api.sendMessage(targetServiceChatId, `Завтра выходит ${username}`);
+    },
+  );
 
   // Запланировать уведомление в день включения в 10:15
-  schedule.scheduleJob(moment(includeDate).set({ hour: 10, minute: 15 }).toDate(), () => {
+  schedule.scheduleJob(notifyDayOf, moment(includeDate).set({ hour: 10, minute: 15 }).toDate(), () => {
     bot.api.sendMessage(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
   });
 
   // Запланировать включение разработчика в 21:00
-  schedule.scheduleJob(moment(includeDate).set({ hour: 21, minute: 0 }).toDate(), async () => {
+  schedule.scheduleJob(activateAtNight, moment(includeDate).set({ hour: 21, minute: 0 }).toDate(), async () => {
     await includeUserByDate(username, false);
     await bot.api.sendMessage(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
     await bot.api.sendMessage(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
   });
-};
-
-const saveScheduledJobs = async (jobs) => {
-  try {
-    fs.writeFileSync(path.resolve('bd/scheduledJobs.json'), JSON.stringify(jobs, null, 2));
-  } catch (error) {
-    await sendServiceMessage('Ошибка при сохранении задач');
-  }
 };
 
 const loadDevelopmentMode = async () => {
@@ -267,6 +252,10 @@ const loadExcludedUsers = async () => {
   try {
     const data = await fs.readFileSync(path.resolve('bd/excludedUsers.json'));
     excludedUsers = JSON.parse(data);
+    // Планируем задачи при загрузке
+    excludedUsers.forEach((user) => {
+      scheduleJob(user);
+    });
   } catch (error) {
     await sendServiceMessage('Ошибка при чтении исключенных разработчиков из файла');
   }
@@ -335,7 +324,6 @@ loadExcludedUsers();
 loadSuggestions();
 loadMrCounter();
 resetMrCounterIfNeeded();
-loadScheduledJobs();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -697,13 +685,8 @@ const excludeUserWithDate = async (ctx, username, includeDate) => {
     excludedUsers.push({ username, includeDate });
     await saveExcludedUsers();
 
-    // Добавляем задачу и сохраняем её
-    const newJob = { username, includeDate };
-    scheduledJobs.push(newJob);
-    await saveScheduledJobs(scheduledJobs);
-    console.log('scheduledJobs', scheduledJobs);
     // Планируем задачу
-    scheduleJob(newJob);
+    scheduleJob({ username, includeDate });
   }
 };
 
@@ -742,10 +725,14 @@ const includeUser = async (ctx, username) => {
     await saveExcludedUsers();
 
     // Удалить все задачи для этого пользователя
-    scheduledJobs = scheduledJobs.filter((job) => job.username !== username);
-    await saveScheduledJobs(scheduledJobs);
-    Object.values(schedule.scheduledJobs).forEach((job) => {
-      if (job.name.includes(username)) {
+    const jobsToCancel = [
+      `${username}_notify_day_before`,
+      `${username}_notify_day_of`,
+      `${username}_activate_at_night`,
+    ];
+    jobsToCancel.forEach((jobName) => {
+      const job = schedule.scheduledJobs[jobName];
+      if (job) {
         job.cancel();
       }
     });
@@ -851,6 +838,20 @@ bot.command('mrcount', async (ctx) => {
     await ctx.reply(`Количество MR за текущие сутки: ${mrCounter}`);
   } else {
     await ctx.reply('У вас нет прав для выполнения этой команды.');
+  }
+});
+
+// Например, добавить вызов в команде /showjobs
+bot.command('showjobs', async (ctx) => {
+  const jobs = Object.keys(schedule.scheduledJobs);
+  if (jobs.length === 0) {
+    await ctx.reply('Нет запланированных задач.');
+  } else {
+    let message = 'Запланированные задачи:\n';
+    jobs.forEach((jobName) => {
+      message += `- ${jobName}\n`;
+    });
+    await ctx.reply(message);
   }
 });
 
