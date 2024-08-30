@@ -1,4 +1,5 @@
 import moment from 'moment-timezone';
+moment.locale('ru'); // Устанавливаем локаль на русский
 import { funnyPhrases } from './constants.js';
 
 export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('mr:');
@@ -80,3 +81,5 @@ export const getUserTimeMessage = (ctx) => {
 
   return timeOfDayMessage + '. ';
 };
+
+export const formatDate = (dateText) => moment(dateText).format('DD MMMM YYYY');

@@ -1,7 +1,8 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, session } from 'grammy';
 import dotenv from 'dotenv';
 import {
   checkMr,
+  formatDate,
   getEveningMessage,
   getRandomElements,
   getRandomPhraseWithCounter,
@@ -12,7 +13,7 @@ import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
 import moment from 'moment-timezone';
-import jiraInstance from './jiraInstance.js';
+import Calendar from 'telegraf-calendar-telegram';
 
 dotenv.config();
 
@@ -22,9 +23,40 @@ const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отладки бота
 const TG_FRONT_TEAM_CHAT_ID = process.env.TG_FRONT_TEAM_CHAT_ID; // ID чата команды в телеграмме
 const OWNER_ID = process.env.OWNER_ID; // ID разработчика бота
+const DEV_CHAT_ID = process.env.DEV_CHAT_ID; // ID чата разработчика в Телеграм
 
 // Создаем бота
 const bot = new Bot(TOKEN);
+// Настраиваем сессии
+bot.use(
+  session({
+    initial: () => ({
+      calendarData: {},
+    }),
+  }),
+);
+
+const calendar = new Calendar(bot, {
+  startWeekDay: 1, // Неделя начинается с понедельника
+  weekDayNames: ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'],
+  monthNames: [
+    'Январь',
+    'Февраль',
+    'Март',
+    'Апрель',
+    'Май',
+    'Июнь',
+    'Июль',
+    'Август',
+    'Сентябрь',
+    'Октябрь',
+    'Ноябрь',
+    'Декабрь',
+  ],
+  minDate: new Date(new Date().setDate(new Date().getDate() + 1)), // Минимальная дата - завтрашний день
+});
+
+// setup(bot);
 
 // Все разработчики
 let userList = [];
@@ -46,11 +78,13 @@ let mrCounter = 0;
 // Дата последнего сброса МРов
 let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
 
+let calendarData = {
+  isOpen: false,
+  userName: '',
+};
+
 // Переменная для хранения состояния режима разработки
 let isDevelopmentMode = false;
-
-// ID чата разработчика
-const DEV_CHAT_ID = process.env.DEV_CHAT_ID; // ID чата разработчика в Телеграм
 
 bot.api.setMyCommands(
   [
@@ -66,8 +100,11 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
   try {
     // Определяем целевой чат в зависимости от режима разработки
     const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
-
-    if (!userId && !username) return await bot.api.sendMessage(targetChatId, message);
+    if (!userId && !username)
+      return await bot.api.sendMessage(
+        targetChatId,
+        `${message}\n ${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`,
+      );
 
     if (ignoreLogging || loggingEnabled) {
       // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
@@ -82,6 +119,31 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
     await sendServiceMessage('Ошибка отправки сервисного сообщения в чат');
   }
 };
+
+// Обработка нажатий на кнопки календаря для смены месяца
+bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
+  // Извлекаем действие (prev или next) и данные из callback_query
+  const action = ctx.match[1]; // prev или next
+  const currentData = ctx.match.input.split('-').slice(2).join('-'); // Извлекаем дату из callback_query
+
+  // Преобразуем дату в ISO формат
+  const currentMoment = moment(currentData, 'YYYY-MM-DD'); // Преобразуем в формат 'YYYY-MM-DD'
+
+  let newDate;
+  if (action === 'prev') {
+    newDate = currentMoment.subtract(1, 'month').toDate(); // Предыдущий месяц
+  } else if (action === 'next') {
+    newDate = currentMoment.add(1, 'month').toDate(); // Следующий месяц
+  }
+
+  // Обновляем календарь на новый месяц
+  await ctx.editMessageReplyMarkup({
+    reply_markup: calendar.getCalendar(newDate).reply_markup,
+  });
+
+  // Подтверждаем callback-запрос
+  await ctx.answerCallbackQuery();
+});
 
 const loadDevelopmentMode = async () => {
   try {
@@ -199,6 +261,14 @@ const saveExcludedUsers = async () => {
   }
 };
 
+const isUserExcluded = (username) => {
+  return excludedUsers.some((user) => user.username === username);
+};
+
+const getUserExclusionIndex = (username) => {
+  return excludedUsers.findIndex((user) => user.username === username);
+};
+
 // Загрузка предлодений из файла
 const loadSuggestions = async () => {
   try {
@@ -230,12 +300,12 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
 //   }
 // };
 
+loadDevelopmentMode();
 loadUserList();
 loadExcludedUsers();
 loadSuggestions();
 loadMrCounter();
 resetMrCounterIfNeeded();
-loadDevelopmentMode();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -322,7 +392,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   // Выбор двух случайных ревьюверов
   const availableReviewers = userList
     .filter((user) => user.messengerNick !== authorNick)
-    .filter((user) => !excludedUsers.includes(user.messengerNick));
+    .filter((user) => !isUserExcluded(user.messengerNick));
   const reviewers = getRandomElements(availableReviewers, 2);
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
   await incrementMrCounter(ctx, countMrs); // Одобавляем + countMrs к счетчику МРов
@@ -579,18 +649,53 @@ const assignReviewers = async (ctx, message, authorNick) => {
   await simpleChooseReviewers(ctx, message, authorNick, mrLinks.length);
 };
 
-const excludeUser = async (ctx, username) => {
-  if (!excludedUsers.includes(username)) {
-    excludedUsers.push(username);
-    if (loggingEnabled) {
-      await sendServiceMessage(`Временно исключен: ${username}❌`, ctx.from.id, ctx.from.username);
-    }
+// Показать календарь для выбора даты включения разработчика
+const showCalendar = async (ctx, username) => {
+  await ctx.reply(
+    `Выберите дату автоматического включения разработчика ${username}:`,
+    calendar.getCalendar(new Date()),
+  );
+  calendarData = {
+    isOpen: true,
+    userName: username,
+  };
+};
+
+// Функция для обработки исключения с датой включения
+const excludeUserWithDate = async (ctx, username, includeDate) => {
+  if (!isUserExcluded(username)) {
+    excludedUsers.push({ username, includeDate });
     await saveExcludedUsers();
+    // Запланируйте задачу на включение разработчика
+    // scheduleUserInclusion(username, includeDate);
+  }
+};
+
+// Функция для планирования включения разработчика
+const scheduleUserInclusion = (username, includeDate) => {
+  const now = new Date();
+  const inclusionDate = new Date(includeDate);
+
+  const delay = inclusionDate.getTime() - now.getTime();
+
+  if (delay > 0) {
+    setTimeout(async () => {
+      await includeUserByDate(username);
+    }, delay);
+  }
+};
+
+const includeUserByDate = async (username) => {
+  const index = getUserExclusionIndex(username);
+  if (index !== -1) {
+    excludedUsers.splice(index, 1);
+    await saveExcludedUsers();
+    await sendServiceMessage(`Разработчик ${username} автоматически включен.✅`);
   }
 };
 
 const includeUser = async (ctx, username) => {
-  const index = excludedUsers.indexOf(username);
+  const index = getUserExclusionIndex(username);
   if (index !== -1) {
     excludedUsers.splice(index, 1);
     if (loggingEnabled) {
@@ -602,11 +707,14 @@ const includeUser = async (ctx, username) => {
 
 // Функция для отображения списка пользователей
 const listUsers = async (ctx) => {
-  const activeUsers = userList.filter((user) => !excludedUsers.includes(user.messengerNick));
+  const activeUsers = userList.filter((user) => !isUserExcluded(user.messengerNick));
   const allUsers = userList.map((user) => `${user.messengerNick} - ${user.gitlabName}`).join('\n');
   const excluded = userList
-    .filter((user) => excludedUsers.includes(user.messengerNick))
-    .map((user) => `${user.messengerNick} - ${user.gitlabName}`)
+    .filter((user) => isUserExcluded(user.messengerNick))
+    .map((user) => {
+      const userObj = excludedUsers.find((exUser) => exUser.username === user.messengerNick);
+      return `${user.messengerNick} - ${user.gitlabName}\n(автоматически активируется:\n${formatDate(userObj.includeDate)})`;
+    })
     .join('\n');
   const active = activeUsers.map((user) => `${user.messengerNick} - ${user.gitlabName}`).join('\n');
 
@@ -621,9 +729,9 @@ const showUserList = async (ctx, action) => {
   if (action === 'remove_user') {
     users = userList; // Показываем всех пользователей, включая исключенных
   } else if (action === 'exclude_user') {
-    users = userList.filter((user) => !excludedUsers.includes(user.messengerNick));
+    users = userList.filter((user) => !isUserExcluded(user.messengerNick));
   } else if (action === 'include_user') {
-    users = userList.filter((user) => excludedUsers.includes(user.messengerNick));
+    users = userList.filter((user) => isUserExcluded(user.messengerNick));
   }
 
   if (!users || users.length === 0) {
@@ -802,19 +910,18 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
               ctx.from.username,
             );
           }
-          if (excludedUsers.includes(username)) {
+          if (isUserExcluded(username)) {
             await includeUser(ctx, username);
           }
           responseMessage = `Разработчик ${username} удален из списка.`;
           break;
         case 'exclude_user':
-          if (!excludedUsers.includes(username)) {
-            await excludeUser(ctx, username);
-            responseMessage = `Разработчик ${username} временно не активен.`;
+          if (!isUserExcluded(username)) {
+            await showCalendar(ctx, username);
           }
           break;
         case 'include_user':
-          if (excludedUsers.includes(username)) {
+          if (isUserExcluded(username)) {
             await includeUser(ctx, username);
             responseMessage = `Разработчик ${username} возвращен в список.`;
           }
@@ -825,6 +932,8 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
       if (responseMessage) {
         await ctx.editMessageText(responseMessage);
       }
+
+      if (calendarData.isOpen) return;
       await listUsers(ctx);
     } else {
       console.error('User not found:', username);
@@ -838,10 +947,21 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
 bot.callbackQuery(/.*/, async (ctx) => {
   const action = ctx.callbackQuery.data;
   const session = getSession(ctx.chat.id);
-
   // Если не админ
   if (!(await isAdmin(ctx))) {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
+    return;
+  }
+
+  if (calendarData.isOpen && action.startsWith('calendar-telegram-date-')) {
+    const dateText = action.split('-').slice(3).join('-'); // Извлекаем дату из данных
+    await ctx.reply(`Вы выбрали дату активации разработчика:\n ${formatDate(dateText)}`);
+    calendarData.isOpen = false;
+    // Здесь вызываем функцию для сохранения даты включения и автоматического включения разработчика
+    await excludeUserWithDate(ctx, calendarData.userName, dateText);
+    // Обязательно подтверждаем callback-запрос
+    await ctx.answerCallbackQuery();
+    await listUsers(ctx);
     return;
   }
 
