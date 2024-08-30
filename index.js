@@ -932,6 +932,11 @@ bot.callbackQuery(/.*/, async (ctx) => {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
     return;
   }
+  
+  // Если бот ждет текст, но пользователь нажал другую кнопку, сбрасываем ожидание
+  if (session.awaitingSuggestionsInput) {
+    session.awaitingSuggestionsInput = false;
+  }
 
   if (calendarData.isOpen && action.startsWith('calendar-telegram-date-')) {
     const dateText = action.split('-').slice(3).join('-'); // Извлекаем дату из данных
@@ -952,11 +957,8 @@ bot.callbackQuery(/.*/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await listUsers(ctx);
     return;
-  }
-
-  // Если бот ждет текст, но пользователь нажал другую кнопку, сбрасываем ожидание
-  if (session.awaitingSuggestionsInput) {
-    session.awaitingSuggestionsInput = false;
+  } else {
+    calendarData.isOpen = false;
   }
 
   switch (action) {
