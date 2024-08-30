@@ -1,4 +1,7 @@
 import { Bot, InlineKeyboard, session } from 'grammy';
+import moment from 'moment-timezone';
+import Calendar from 'telegraf-calendar-telegram';
+import schedule from 'node-schedule';
 import dotenv from 'dotenv';
 import {
   checkMr,
@@ -12,8 +15,6 @@ import { calendarOptions, manyMrPhrases, motivationalMessages } from './constant
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
-import moment from 'moment-timezone';
-import Calendar from 'telegraf-calendar-telegram';
 
 dotenv.config();
 
@@ -58,13 +59,16 @@ let mrCounter = 0;
 // Дата последнего сброса МРов
 let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
 
+// Переменная для хранения состояния режима разработки
+let isDevelopmentMode = false;
+
+// Словарь для хранения задач по каждому пользователю
+let scheduledJobs = [];
+
 let calendarData = {
   isOpen: false,
   userName: '',
 };
-
-// Переменная для хранения состояния режима разработки
-let isDevelopmentMode = false;
 
 bot.api.setMyCommands(
   [
@@ -83,7 +87,7 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
     if (!userId && !username)
       return await bot.api.sendMessage(
         targetChatId,
-        `${message}\n ${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`,
+        `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`,
       );
 
     if (ignoreLogging || loggingEnabled) {
@@ -125,9 +129,54 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
   await ctx.answerCallbackQuery();
 });
 
+const loadScheduledJobs = async () => {
+  try {
+    const data = await fs.readFileSync(path.resolve('bd/scheduledJobs.json'));
+    scheduledJobs = JSON.parse(data);
+    console.log('scheduledJobs', scheduledJobs);
+    scheduledJobs.forEach((job) => {
+      scheduleJob(job);
+    });
+  } catch (error) {
+    await sendServiceMessage('Ошибка при чтении запланированных задач');
+    return [];
+  }
+};
+
+const scheduleJob = (job) => {
+  const { username, includeDate } = job;
+  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_FRONT_TEAM_CHAT_ID;
+  const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
+
+  // Запланировать уведомление за день до включения
+  schedule.scheduleJob(moment(includeDate).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(), () => {
+    bot.api.sendMessage(targetServiceChatId, `Завтра выходит ${username}`);
+  });
+
+  // Запланировать уведомление в день включения в 10:15
+  schedule.scheduleJob(moment(includeDate).set({ hour: 10, minute: 15 }).toDate(), () => {
+    bot.api.sendMessage(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+  });
+
+  // Запланировать включение разработчика в 21:00
+  schedule.scheduleJob(moment(includeDate).set({ hour: 21, minute: 0 }).toDate(), async () => {
+    await includeUserByDate(username, false);
+    await bot.api.sendMessage(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
+    await bot.api.sendMessage(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
+  });
+};
+
+const saveScheduledJobs = async (jobs) => {
+  try {
+    fs.writeFileSync(path.resolve('bd/scheduledJobs.json'), JSON.stringify(jobs, null, 2));
+  } catch (error) {
+    await sendServiceMessage('Ошибка при сохранении задач');
+  }
+};
+
 const loadDevelopmentMode = async () => {
   try {
-    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/devMode.json')));
+    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/scheduledJobs.json')));
     isDevelopmentMode = data.isDevelopmentMode || false;
   } catch (error) {
     await sendServiceMessage('Ошибка при загрузке состояния режима разработки');
@@ -286,6 +335,7 @@ loadExcludedUsers();
 loadSuggestions();
 loadMrCounter();
 resetMrCounterIfNeeded();
+loadScheduledJobs();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -646,8 +696,14 @@ const excludeUserWithDate = async (ctx, username, includeDate) => {
   if (!isUserExcluded(username)) {
     excludedUsers.push({ username, includeDate });
     await saveExcludedUsers();
-    // Запланируйте задачу на включение разработчика
-    // scheduleUserInclusion(username, includeDate);
+
+    // Добавляем задачу и сохраняем её
+    const newJob = { username, includeDate };
+    scheduledJobs.push(newJob);
+    await saveScheduledJobs(scheduledJobs);
+    console.log('scheduledJobs', scheduledJobs);
+    // Планируем задачу
+    scheduleJob(newJob);
   }
 };
 
@@ -665,12 +721,14 @@ const scheduleUserInclusion = (username, includeDate) => {
   }
 };
 
-const includeUserByDate = async (username) => {
+const includeUserByDate = async (username, needSendServiceMessage = true) => {
   const index = getUserExclusionIndex(username);
   if (index !== -1) {
     excludedUsers.splice(index, 1);
     await saveExcludedUsers();
-    await sendServiceMessage(`Разработчик ${username} автоматически включен.✅`);
+    if (needSendServiceMessage) {
+      await sendServiceMessage(`Разработчик ${username} автоматически включен.✅`);
+    }
   }
 };
 
@@ -682,6 +740,15 @@ const includeUser = async (ctx, username) => {
       await sendServiceMessage(`Разработчик ${username} активен✅`, ctx.from.id, ctx.from.username);
     }
     await saveExcludedUsers();
+
+    // Удалить все задачи для этого пользователя
+    scheduledJobs = scheduledJobs.filter((job) => job.username !== username);
+    await saveScheduledJobs(scheduledJobs);
+    Object.values(schedule.scheduledJobs).forEach((job) => {
+      if (job.name.includes(username)) {
+        job.cancel();
+      }
+    });
   }
 };
 
@@ -932,7 +999,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
     return;
   }
-  
+
   // Если бот ждет текст, но пользователь нажал другую кнопку, сбрасываем ожидание
   if (session.awaitingSuggestionsInput) {
     session.awaitingSuggestionsInput = false;
