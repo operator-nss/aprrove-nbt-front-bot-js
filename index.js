@@ -122,7 +122,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога 20 сообщений
-  if (mrCounter % 15 === 0) {
+  if (mrCounter % 10 === 0) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
