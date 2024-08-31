@@ -87,12 +87,12 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
     if (!userId && !username)
       return await sendMessageToChat(
         targetChatId,
-        `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`,
+        `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : ''}`,
       );
 
     if (ignoreLogging || loggingEnabled) {
       // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
-      const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}, ${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`;
+      const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}, ${isDevelopmentMode ? 'Чат: разработчика' : ''}`;
 
       // Отправляем сообщение в сервисный чат
       await sendMessageToChat(targetChatId, fullMessage, {
