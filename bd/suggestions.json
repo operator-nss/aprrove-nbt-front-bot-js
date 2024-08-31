@@ -2,19 +2,7 @@
   {
     "userId": 482997536,
     "username": "FrontendMaestro",
-    "suggestion": "Пофиксить некорректные ссылки мра как у Вани кулая",
-    "timestamp": "2024-08-29T15:05:38.631Z"
-  },
- {
-    "userId": 482997536,
-    "username": "FrontendMaestro",
-    "suggestion": "фикс когда у бота нет прав админа в группе",
-    "timestamp": "2024-08-30T07:55:10.460Z"
-  },
-  {
-    "userId": 482997536,
-    "username": "FrontendMaestro",
-    "suggestion": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3513\n\nпроверить почему он не написал что мало ревьюверов и выбрал из активных просто",
+    "suggestion": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3513\n\n не учитываем что пользаки не могут апурвнуть по правилам если коментили чтото",
     "timestamp": "2024-08-30T11:46:41.340Z"
   }
 ]

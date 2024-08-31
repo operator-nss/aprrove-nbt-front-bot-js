@@ -85,7 +85,7 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
     // Определяем целевой чат в зависимости от режима разработки
     const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
     if (!userId && !username)
-      return await bot.api.sendMessage(
+      return await sendMessageToChat(
         targetChatId,
         `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`,
       );
@@ -95,12 +95,67 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
       const fullMessage = `${message}\nИнициатор: ${username ? '@' + username : `ID: ${userId}`}, ${isDevelopmentMode ? 'Чат: разработчика' : 'Чат: сервисный'}`;
 
       // Отправляем сообщение в сервисный чат
-      await bot.api.sendMessage(targetChatId, fullMessage, {
+      await sendMessageToChat(targetChatId, fullMessage, {
         disable_web_page_preview: true,
       });
     }
   } catch (error) {
     await sendServiceMessage('Ошибка отправки сервисного сообщения в чат');
+  }
+};
+
+const checkChatValidity = async () => {
+  const chatIds = {
+    DEV_CHAT_ID,
+    SERVICE_CHAT_ID,
+    TG_FRONT_TEAM_CHAT_ID,
+    OWNER_ID,
+  };
+
+  const results = []; // Сбор результатов проверки
+
+  for (const [chatName, chatId] of Object.entries(chatIds)) {
+    try {
+      await bot.api.getChat(chatId);
+      const message = `Чат ${chatName} (${chatId}) доступен.`;
+      results.push(`✅ ${message}`); // Добавляем результат в массив
+    } catch (error) {
+      const errorMessage = `Ошибка доступа к чату ${chatName} (${chatId}): ${error.message}`;
+      results.push(`❌ ${errorMessage}`); // Добавляем ошибку в массив
+    }
+  }
+
+  // Сообщение для вывода
+  const finalMessage = results.join('\n');
+
+  if (isDevelopmentMode) {
+    console.log('Результаты проверки чатов:\n', finalMessage);
+  } else {
+    await sendMessageToChat(OWNER_ID, `Результаты проверки чатов:\n${finalMessage}`);
+  }
+};
+
+// Проверка валидности чатов при запуске бота
+bot.start({
+  onStart: async () => {
+    await checkChatValidity();
+  },
+});
+
+export const sendMessageToChat = async (chatId, message) => {
+  try {
+    await bot.api.sendMessage(chatId, message);
+  } catch (error) {
+    console.error(`Ошибка отправки сообщения в чат ${chatId}:`, error.message);
+
+    // Уведомляем администратора об ошибке
+    if (chatId !== OWNER_ID) {
+      try {
+        await sendMessageToChat(OWNER_ID, `Ошибка отправки сообщения в чат ${chatId}: ${error.message}`);
+      } catch (adminError) {
+        console.error(`Ошибка уведомления администратора:`, adminError.message);
+      }
+    }
   }
 };
 
@@ -158,20 +213,20 @@ const scheduleJob = (job) => {
       .toDate(); // 15 секунд спустя
 
     schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, () => {
-      bot.api.sendMessage(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
+      sendMessageToChat(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
     });
 
     schedule.scheduleJob(notifyDayOf, tenSecondsLater, async () => {
       await includeUserByDate(username, false);
-      await bot.api.sendMessage(OWNER_ID, `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`);
-      await bot.api.sendMessage(
+      await sendMessageToChat(OWNER_ID, `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`);
+      await sendMessageToChat(
         DEV_CHAT_ID,
         `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`,
       );
     });
 
     schedule.scheduleJob(activateAtNight, fifteenSecondsLater, async () => {
-      await bot.api.sendMessage(
+      await sendMessageToChat(
         DEV_CHAT_ID,
         `Тестовое уведомление: Всем привет! ${username} вышел на работу и может быть назначен ревьювером!`,
       );
@@ -182,13 +237,13 @@ const scheduleJob = (job) => {
       notifyDayBefore,
       moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
       () => {
-        bot.api.sendMessage(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
+        sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
       },
     );
 
     // Запланировать уведомление в день включения в 10:15
     schedule.scheduleJob(notifyDayOf, moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(), () => {
-      bot.api.sendMessage(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+      sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
     });
 
     // Запланировать включение разработчика в 21:00 за день до includeDate
@@ -197,8 +252,8 @@ const scheduleJob = (job) => {
       moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(),
       async () => {
         await includeUserByDate(username, false);
-        await bot.api.sendMessage(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
-        await bot.api.sendMessage(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
+        await sendMessageToChat(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
+        await sendMessageToChat(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
       },
     );
   }
@@ -488,11 +543,17 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
   await incrementMrCounter(ctx, countMrs); // Одобавляем + countMrs к счетчику МРов
   const timeMessage = getUserTimeMessage(ctx);
-  await ctx.reply(getEveningMessage(`Назначены ревьюверы: ${reviewerMentions}`, timeMessage), {
-    reply_to_message_id: ctx.message.message_id,
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-  });
+  await ctx.reply(
+    getEveningMessage(
+      `Назначены ревьюверы:${isDevelopmentMode ? ' simpleChooseReviewers ' : ''} ${reviewerMentions}`,
+      timeMessage,
+    ),
+    {
+      reply_to_message_id: ctx.message.message_id,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    },
+  );
 };
 
 const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
@@ -565,11 +626,11 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           continue;
         }
 
-        if (mergeRequestState?.toLowerCase() === 'merged') {
-          allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
-          success = true;
-          continue;
-        }
+        // if (mergeRequestState?.toLowerCase() === 'merged') {
+        //   allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
+        //   success = true;
+        //   continue;
+        // }
 
         if (mergeRequestState?.toLowerCase() === 'closed') {
           allAnswers += `\n${mrUrl}\nЭтот МР закрыт) Может ссылка не та?🤔\n`;
@@ -655,7 +716,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           (lead) => lead.gitlabName === selectedCheckMrNick,
         ).messengerNick;
 
-        allAnswers += `\n${mrUrl}\nНазначены ревьюверы: ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
+        allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
         success = true; // Устанавливаем флаг успешного выполнения
       }
@@ -961,7 +1022,7 @@ bot.on('msg:text', async (ctx) => {
     session.awaitingSuggestionsInput = false;
     await showMenu(ctx);
     // Отправка сообщения разработчику в личку
-    await bot.api.sendMessage(
+    await sendMessageToChat(
       OWNER_ID,
       `Новое предложение по боту от ${ctx.from.username || ctx.from.first_name}: ${suggestion}`,
     );
@@ -1156,4 +1217,8 @@ bot.callbackQuery(/.*/, async (ctx) => {
 });
 
 // Запуск бота
-bot.start();
+bot.start({
+  onStart: async () => {
+    await checkChatValidity();
+  },
+});
