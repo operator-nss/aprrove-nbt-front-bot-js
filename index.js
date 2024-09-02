@@ -626,11 +626,11 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           continue;
         }
 
-        // if (mergeRequestState?.toLowerCase() === 'merged') {
-        //   allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
-        //   success = true;
-        //   continue;
-        // }
+        if (mergeRequestState?.toLowerCase() === 'merged') {
+           allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
+          success = true;
+           continue;
+        }
 
         if (mergeRequestState?.toLowerCase() === 'closed') {
           allAnswers += `\n${mrUrl}\nЭтот МР закрыт) Может ссылка не та?🤔\n`;
@@ -648,7 +648,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         let leadApprovers = [];
         let simpleApprovers = [];
         let leadRequired = false;
-        const activeUsers = userList.filter((user) => !excludedUsers.includes(user.messengerNick));
+        const activeUsers = userList.filter((user) => !isUserExcluded(user.messengerNick));
 
         for (const rule of approvalRulesUrlResponse) {
           if (!rule.name || !rule.approvals_required || !rule.eligible_approvers) {
@@ -746,7 +746,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 const assignReviewers = async (ctx, message, authorNick) => {
   const availableReviewers = userList
     .filter((user) => user.messengerNick !== authorNick)
-    .filter((user) => !excludedUsers.includes(user.messengerNick));
+    .filter((user) => !isUserExcluded(user.messengerNick));
 
   if (availableReviewers.length === 0) {
     const timeMessage = getUserTimeMessage(ctx);

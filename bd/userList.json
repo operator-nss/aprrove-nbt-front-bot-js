@@ -1,9 +1,5 @@
 [
   {
-    "messengerNick": "@FrontendMaestro",
-    "gitlabName": "Aleksey.Sokolov"
-  },
-  {
     "messengerNick": "@IIvangelion",
     "gitlabName": "Ivan.Dyatlov"
   },
@@ -22,5 +18,9 @@
   {
     "messengerNick": "@krr_ruslan",
     "gitlabName": "Ruslan.Karamov"
+  },
+  {
+    "messengerNick": "@FrontendMaestro",
+    "gitlabName": "Aleksey.Sokolov"
   }
 ]
