@@ -77,7 +77,7 @@ bot.api.setMyCommands(
     { command: 'mrcount', description: 'Узнать сколько Мров сделали за этот день' },
     { command: 'jobs', description: 'Показать запланированные уведомления' },
   ],
-  { scope: { type: 'all_private_chats' } },
+  { scope: { type: 'all_chat_administrators' } },
 );
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
@@ -1087,6 +1087,29 @@ bot.command('jobs', async (ctx) => {
   } else {
     await ctx.reply('У вас нет прав для выполнения этой команды.');
   }
+});
+
+bot.command('all', async (ctx) => {
+  // Получаем текст сообщения после команды /all
+  const messageText = ctx.message.text.split(' ').slice(1).join(' ');
+
+  // Проверяем, есть ли текст после команды
+  if (!messageText) {
+    await ctx.reply('Пожалуйста, добавьте текст после команды /all.');
+    return;
+  }
+
+  // Получаем список активных ревьюеров
+  const activeReviewers = userList
+    .filter((user) => !isUserExcluded(user.messengerNick))
+    .map((user) => user.messengerNick)
+    .join(' ');
+
+  // Формируем сообщение
+  const message = `${activeReviewers}\n\n${messageText}`;
+
+  // Отправляем сообщение в чат с экранированием символов
+  await ctx.reply(message);
 });
 
 bot.on(':voice', async (ctx) => {
