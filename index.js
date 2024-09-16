@@ -75,9 +75,9 @@ bot.api.setMyCommands(
     { command: 'help', description: 'WTF' },
     { command: 'chatid', description: 'Получить ID чата' },
     { command: 'mrcount', description: 'Узнать сколько Мров сделали за этот день' },
-    { command: 'showjobs', description: 'Показать запланированные уведомления' },
+    { command: 'jobs', description: 'Показать запланированные уведомления' },
   ],
-  { scope: { type: 'all_chat_administrators' } },
+  { scope: { type: 'all_private_chats' } },
 );
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
@@ -627,13 +627,13 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           continue;
         }
 
-        if (mergeRequestState?.toLowerCase() === 'merged') {
+        if (mergeRequestState?.toLowerCase() === 'merged' && !isDevelopmentMode) {
           allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
           success = true;
           continue;
         }
 
-        if (mergeRequestState?.toLowerCase() === 'closed') {
+        if (mergeRequestState?.toLowerCase() === 'closed' && !isDevelopmentMode) {
           allAnswers += `\n${mrUrl}\nЭтот МР закрыт) Может ссылка не та?🤔\n`;
           success = true;
           continue;
@@ -935,11 +935,6 @@ const helpCommand = async (ctx) => {
   await showMenu(ctx);
 };
 
-// Обработка команды /start
-bot.command('start', async (ctx) => {
-  await startBot(ctx);
-});
-
 bot.command('start', async (ctx) => await startBot(ctx));
 
 bot.command('help', async (ctx) => {
@@ -968,9 +963,12 @@ bot.command('mrcount', async (ctx) => {
   }
 });
 
-// Например, добавить вызов в команде /showjobs
-bot.command('showjobs', async (ctx) => {
-  await showScheduledJobs(ctx);
+bot.command('jobs', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    await showScheduledJobs(ctx);
+  } else {
+    await ctx.reply('У вас нет прав для выполнения этой команды.');
+  }
 });
 
 bot.on(':voice', async (ctx) => {

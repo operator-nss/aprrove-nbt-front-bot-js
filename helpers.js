@@ -3,7 +3,7 @@ moment.locale('ru'); // Устанавливаем локаль на русск�
 import { funnyPhrases } from './constants.js';
 export const timeZone = 'Europe/Moscow';
 
-export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('mr:');
+export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('merge_requests');
 
 // Функция для случайного выбора N элементов из массива
 export const getRandomElements = (array, n) => {
