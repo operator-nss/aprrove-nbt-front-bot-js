@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon --ignore bd/developmentMode.json --ignore bd/userList.json --ignore bd/excludedUsers.json --ignore bd/suggestions.json --ignore bd/mrCounter.json",
+    "start": "nodemon --ignore bd/developmentMode.json --ignore bd/userList.json --ignore bd/excludedUsers.json --ignore bd/suggestions.json --ignore bd/mrCounter.json --ignore bd/scheduledJobs.json",
     "prettierw": "npx prettier --write \"**/*.{js,ts, json, md, txt}\""
   },
   "author": "",

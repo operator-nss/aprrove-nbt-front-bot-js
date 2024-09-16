@@ -156,6 +156,50 @@ export const sendMessageToChat = async (chatId, message) => {
   }
 };
 
+const saveScheduledJobs = async () => {
+  const jobData = Object.values(schedule.scheduledJobs).map((job) => ({
+    name: job.name,
+    nextInvocation: job.nextInvocation() ? job.nextInvocation().toString() : null,
+  }));
+  try {
+    fs.writeFileSync(path.resolve('bd/scheduledJobs.json'), JSON.stringify(jobData, null, 2));
+  } catch (err) {
+    await sendServiceMessage('Ошибка сохранения задач планировщика в файл');
+  }
+};
+
+const loadScheduledJobs = async () => {
+  try {
+    const jobData = JSON.parse(fs.readFileSync(path.resolve('bd/scheduledJobs.json')));
+
+    jobData.forEach(({ name, nextInvocation }) => {
+      const [username, taskType] = name.split('_');
+      const date = new Date(nextInvocation);
+
+      if (taskType === 'notify') {
+        if (name.includes('day_before')) {
+          scheduleJob({
+            username,
+            includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
+          });
+        } else if (name.includes('day_of')) {
+          scheduleJob({
+            username,
+            includeDate: moment(date).format('YYYY-MM-DD'),
+          });
+        }
+      } else if (taskType === 'activate') {
+        scheduleJob({
+          username,
+          includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
+        });
+      }
+    });
+  } catch (err) {
+    await sendServiceMessage('Ошибка при загрузке задач из файла');
+  }
+};
+
 // Обработка нажатий на кнопки календаря для смены месяца
 bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
   // Извлекаем действие (prev или next) и данные из callback_query
@@ -209,8 +253,9 @@ const scheduleJob = (job) => {
       .set({ hour: 21, minute: 0 })
       .toDate(); // 15 секунд спустя
 
-    schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, () => {
-      sendMessageToChat(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
+    schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, async () => {
+      await sendMessageToChat(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
+      await saveScheduledJobs();
     });
 
     schedule.scheduleJob(notifyDayOf, tenSecondsLater, async () => {
@@ -220,6 +265,7 @@ const scheduleJob = (job) => {
         DEV_CHAT_ID,
         `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`,
       );
+      await saveScheduledJobs();
     });
 
     schedule.scheduleJob(activateAtNight, fifteenSecondsLater, async () => {
@@ -227,6 +273,7 @@ const scheduleJob = (job) => {
         DEV_CHAT_ID,
         `Тестовое уведомление: Всем привет! ${username} вышел на работу и может быть назначен ревьювером!`,
       );
+      await saveScheduledJobs();
     });
   } else {
     // Запланировать уведомление за день до включения
@@ -235,6 +282,7 @@ const scheduleJob = (job) => {
       moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
       async () => {
         await sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
+        await saveScheduledJobs();
       },
     );
 
@@ -244,6 +292,7 @@ const scheduleJob = (job) => {
       moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
       async () => {
         await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+        await saveScheduledJobs();
       },
     );
 
@@ -255,9 +304,11 @@ const scheduleJob = (job) => {
         await includeUserByDate(username, false);
         await sendMessageToChat(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
         await sendMessageToChat(targetServiceChatId, `Разработчик ${username} активирован по планировщику!`);
+        await saveScheduledJobs();
       },
     );
   }
+  saveScheduledJobs();
 };
 
 const showScheduledJobs = async (ctx) => {
@@ -453,6 +504,7 @@ loadExcludedUsers();
 loadSuggestions();
 loadMrCounter();
 resetMrCounterIfNeeded();
+loadScheduledJobs();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -850,6 +902,10 @@ const includeUserByDate = async (username, needSendServiceMessage = true) => {
   if (index !== -1) {
     excludedUsers.splice(index, 1);
     await saveExcludedUsers();
+
+    // Удаляем задачи для этого пользователя
+    removeScheduledJobs(username);
+
     if (needSendServiceMessage) {
       await sendServiceMessage(`Разработчик ${username} автоматически включен.✅`);
     }
@@ -865,19 +921,25 @@ const includeUser = async (ctx, username) => {
     }
     await saveExcludedUsers();
 
-    // Удалить все задачи для этого пользователя
-    const jobsToCancel = [
-      `${username}_notify_day_before`,
-      `${username}_notify_day_of`,
-      `${username}_activate_at_night`,
-    ];
-    jobsToCancel.forEach((jobName) => {
-      const job = schedule.scheduledJobs[jobName];
-      if (job) {
-        job.cancel();
-      }
-    });
+    // Удаляем задачи для этого пользователя
+    removeScheduledJobs(username);
   }
+};
+
+const removeScheduledJobs = (username) => {
+  // Удаляем все задачи для этого пользователя
+  const jobsToCancel = [`${username}_notify_day_before`, `${username}_notify_day_of`, `${username}_activate_at_night`];
+
+  jobsToCancel.forEach((jobName) => {
+    const job = schedule.scheduledJobs[jobName];
+    if (job) {
+      job.cancel(); // Отменяем задачу
+      delete schedule.scheduledJobs[jobName]; // Удаляем задачу из списка
+    }
+  });
+
+  // Сохраняем изменения в файл
+  saveScheduledJobs();
 };
 
 // Функция для отображения списка пользователей
