@@ -639,12 +639,22 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           continue;
         }
         const approvalRulesUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approval_rules`;
+        const suggestedApprovalUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mrId}/approvals`;
+
+        // Получаем список разрешенных апруверов
+        const { data: suggestedApprovalResponse, status: suggestedApprovalStatus } =
+          await axiosInstance.get(suggestedApprovalUrl);
+
+        // Получаем список всех групп апруверов
         const { data: approvalRulesUrlResponse, status: approvalRulesUrlStatus } =
           await axiosInstance.get(approvalRulesUrl);
-        if (approvalRulesUrlStatus !== 200) {
+
+        if (approvalRulesUrlStatus !== 200 || suggestedApprovalStatus !== 200) {
           error += `МР: ${mrUrl}.\nОшибка: Не смог получить ревьюверов в API Gitlab`;
           return false;
         }
+
+        const suggestedApproval = suggestedApprovalResponse.suggested_approvers.map((approver) => approver.username);
 
         let leadApprovers = [];
         let simpleApprovers = [];
@@ -658,19 +668,23 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 
           if (rule?.name?.toLowerCase() === 'lead') {
             leadRequired = rule.approvals_required > 0;
-            leadApprovers = rule.eligible_approvers.filter((approver) =>
-              activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
-            );
+            leadApprovers = rule.eligible_approvers
+              .filter((approver) =>
+                activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
+              )
+              .filter((approver) => suggestedApproval.includes(approver.username));
           } else if (rule.name.startsWith('Check MR')) {
-            simpleApprovers = rule.eligible_approvers.filter((approver) =>
-              activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
-            );
+            simpleApprovers = rule.eligible_approvers
+              .filter((approver) =>
+                activeUsers.some((user) => user.gitlabName === approver.username && user.messengerNick !== authorNick),
+              )
+              .filter((approver) => suggestedApproval.includes(approver.username));
           }
         }
 
         if (leadApprovers.length === 0 && simpleApprovers.length === 0) {
           allAnswers += `\n${mrUrl}\n🚨Никто не работает из ревьюверов или может ты скинул его не в тот чатик?🤔😉🚨\n`;
-          error += `МР: ${mrUrl}.\nОшибка: Нет доступных ревьюверов на основе данных API Gitlab`;
+          error += `МР: ${mrUrl}.\nОшибка: Нет доступных ревьюверов на основе данных API Gitlab(скорее всего потребуется обмен апрува на лайк)`;
           continue;
         }
 
