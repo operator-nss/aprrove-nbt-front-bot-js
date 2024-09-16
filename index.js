@@ -57,7 +57,7 @@ let suggestions = [];
 let loggingEnabled = true;
 
 // Счетчик МРов
-let mrCounter = 0;
+let mrCounter;
 // Дата последнего сброса МРов
 let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
 
@@ -373,20 +373,22 @@ const saveDevelopmentMode = async () => {
 const loadMrCounter = async () => {
   try {
     const data = await JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
-    mrCounter = data.mrCounter || 0;
+    mrCounter = data;
     lastResetDate = data.lastResetDate || moment().tz('Europe/Moscow').format('YYYY-MM-DD');
   } catch (error) {
+    mrCounter = {
+      daily: { count: 0, lastResetDate: moment().tz('Europe/Moscow').format('YYYY-MM-DD') },
+      monthly: { count: 0, lastResetMonth: moment().tz('Europe/Moscow').format('YYYY-MM') },
+      yearly: { count: 0, lastResetYear: moment().tz('Europe/Moscow').format('YYYY') },
+    };
+    await saveMrCounter();
     await sendServiceMessage('Ошибка при загрузке счетчика MR');
   }
 };
 
 const saveMrCounter = async () => {
   try {
-    const data = {
-      mrCounter,
-      lastResetDate,
-    };
-    fs.writeFileSync(path.resolve('bd/mrCounter.json'), JSON.stringify(data, null, 2));
+    fs.writeFileSync(path.resolve('bd/mrCounter.json'), JSON.stringify(mrCounter, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении счетчика MR');
   }
@@ -394,31 +396,65 @@ const saveMrCounter = async () => {
 
 const resetMrCounterIfNeeded = async () => {
   const currentDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD');
-  let savedData;
-  try {
-    savedData = JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
-  } catch (error) {
-    await sendServiceMessage('Ошибка при чтении mrCounter.json');
-    return;
+  const currentMonth = moment().tz('Europe/Moscow').format('YYYY-MM');
+  const currentYear = moment().tz('Europe/Moscow').format('YYYY');
+
+  // Проверяем и инициализируем mrCounter, если он undefined
+  if (!mrCounter || typeof mrCounter !== 'object') {
+    mrCounter = {
+      daily: { count: 0, lastResetDate: currentDate },
+      monthly: { count: 0, lastResetMonth: currentMonth },
+      yearly: { count: 0, lastResetYear: currentYear },
+    };
   }
-  const savedDate = savedData.lastResetDate || '';
-  // Если текущая дата не совпадает с датой в файле, сбрасываем счетчик
-  if (currentDate !== savedDate) {
-    mrCounter = 0;
-    lastResetDate = currentDate;
-    await saveMrCounter();
+
+  // Инициализируем вложенные объекты, если они отсутствуют
+  if (!mrCounter.daily || typeof mrCounter.daily !== 'object') {
+    mrCounter.daily = { count: 0, lastResetDate: currentDate };
   }
+  if (!mrCounter.monthly || typeof mrCounter.monthly !== 'object') {
+    mrCounter.monthly = { count: 0, lastResetMonth: currentMonth };
+  }
+  if (!mrCounter.yearly || typeof mrCounter.yearly !== 'object') {
+    mrCounter.yearly = { count: 0, lastResetYear: currentYear };
+  }
+
+  // Сброс счетчика за день
+  if (mrCounter.daily.lastResetDate !== currentDate) {
+    mrCounter.daily.count = 0;
+    mrCounter.daily.lastResetDate = currentDate;
+  }
+
+  // Сброс счетчика за месяц
+  if (mrCounter.monthly.lastResetMonth !== currentMonth) {
+    mrCounter.monthly.count = 0;
+    mrCounter.monthly.lastResetMonth = currentMonth;
+  }
+
+  // Сброс счетчика за год
+  if (mrCounter.yearly.lastResetYear !== currentYear) {
+    mrCounter.yearly.count = 0;
+    mrCounter.yearly.lastResetYear = currentYear;
+  }
+
+  await saveMrCounter();
 };
 
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  if (ctx.chat.id.toString() !== TG_FRONT_TEAM_CHAT_ID.toString()) return;
+  // if (ctx.chat.id.toString() !== TG_FRONT_TEAM_CHAT_ID.toString()) return;
+
   await resetMrCounterIfNeeded();
-  mrCounter += count;
+
+  // Увеличиваем счетчики
+  mrCounter.daily.count += count;
+  mrCounter.monthly.count += count;
+  mrCounter.yearly.count += count;
+
   await saveMrCounter();
 
-  // Отправляем мотивационное сообщение при достижении порога 20 сообщений
-  if (mrCounter % 10 === 0) {
+  // Отправляем мотивационное сообщение при достижении порога
+  if (mrCounter.daily.count % 10 === 0) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
@@ -1033,7 +1069,13 @@ bot.command('chatid', async (ctx) => {
 bot.command('mrcount', async (ctx) => {
   if (await isAdmin(ctx)) {
     await resetMrCounterIfNeeded();
-    await ctx.reply(`Количество MR за текущие сутки: ${mrCounter}`);
+    const dailyCount = mrCounter.daily?.count || 0;
+    const monthlyCount = mrCounter.monthly?.count || 0;
+    const yearlyCount = mrCounter.yearly?.count || 0;
+
+    await ctx.reply(
+      `Количество MR:\nЗа текущие сутки: ${dailyCount}\nЗа текущий месяц: ${monthlyCount}\nЗа текущий год: ${yearlyCount}`,
+    );
   } else {
     await ctx.reply('У вас нет прав для выполнения этой команды.');
   }

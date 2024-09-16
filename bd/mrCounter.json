@@ -1,4 +1,14 @@
 {
-  "mrCounter": 10,
-  "lastResetDate": "2024-09-16"
+  "daily": {
+    "count": 0,
+    "lastResetDate": "2024-09-16"
+  },
+  "monthly": {
+    "count": 0,
+    "lastResetMonth": "2024-09"
+  },
+  "yearly": {
+    "count": 0,
+    "lastResetYear": "2024"
+  }
 }
