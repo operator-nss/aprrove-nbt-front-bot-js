@@ -24,7 +24,7 @@ const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
 const GITLAB_URL = process.env.GITLAB_URL; // GitLab main url
 const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отладки бота
-const TG_FRONT_TEAM_CHAT_ID = process.env.TG_FRONT_TEAM_CHAT_ID; // ID чата команды в телеграмме
+const TG_TEAM_CHAT_ID = process.env.TG_TEAM_CHAT_ID; // ID чата команды в телеграмме
 const OWNER_ID = process.env.OWNER_ID; // ID разработчика бота
 const DEV_CHAT_ID = process.env.DEV_CHAT_ID; // ID чата разработчика в Телеграм
 
@@ -58,8 +58,9 @@ let loggingEnabled = true;
 
 // Счетчик МРов
 let mrCounter;
-// Дата последнего сброса МРов
-let lastResetDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD'); // Текущая дата в формате YYYY-MM-DD
+
+// Список мров
+let mergeRequests;
 
 // Переменная для хранения состояния режима разработки
 let isDevelopmentMode = false;
@@ -76,8 +77,9 @@ bot.api.setMyCommands(
     { command: 'chatid', description: 'Получить ID чата' },
     { command: 'mrcount', description: 'Узнать сколько Мров сделали за этот день' },
     { command: 'jobs', description: 'Показать запланированные уведомления' },
+    { command: 'mrinfo', description: 'Показать невлитые МРы' },
   ],
-  { scope: { type: 'all_chat_administrators' } },
+  { scope: { type: 'all_chat_administrators' } }, // all_private_chats
 );
 
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
@@ -105,7 +107,7 @@ const checkChatValidity = async () => {
   const chatIds = {
     DEV_CHAT_ID,
     SERVICE_CHAT_ID,
-    TG_FRONT_TEAM_CHAT_ID,
+    TG_TEAM_CHAT_ID,
     OWNER_ID,
   };
 
@@ -153,6 +155,25 @@ export const sendMessageToChat = async (chatId, message) => {
         console.error(`Ошибка уведомления администратора:`, adminError.message);
       }
     }
+  }
+};
+
+const saveMergeRequests = async (mergeRequests) => {
+  try {
+    fs.writeFileSync(path.resolve('bd/mergeRequests.json'), JSON.stringify(mergeRequests, null, 2));
+  } catch (error) {
+    await sendServiceMessage('Ошибка при сохранении МР в файл');
+  }
+};
+
+const loadMergeRequests = async () => {
+  try {
+    const data = fs.readFileSync(path.resolve('bd/mergeRequests.json'));
+    mergeRequests = JSON.parse(data);
+  } catch (error) {
+    console.error('Ошибка при загрузке МР из файла:', error);
+    await sendServiceMessage('Ошибка при загрузке МР из файла');
+    return [];
   }
 };
 
@@ -227,7 +248,7 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 
 const scheduleJob = (job) => {
   const { username, includeDate } = job;
-  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_FRONT_TEAM_CHAT_ID;
+  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
   const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
 
   // Уникальные имена задач для каждого события
@@ -374,7 +395,6 @@ const loadMrCounter = async () => {
   try {
     const data = await JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
     mrCounter = data;
-    lastResetDate = data.lastResetDate || moment().tz('Europe/Moscow').format('YYYY-MM-DD');
   } catch (error) {
     mrCounter = {
       daily: { count: 0, lastResetDate: moment().tz('Europe/Moscow').format('YYYY-MM-DD') },
@@ -440,9 +460,31 @@ const resetMrCounterIfNeeded = async () => {
   await saveMrCounter();
 };
 
+// Функция для планирования уведомлений о невлитых Merge Requests
+const scheduleUnmergedMergeRequestsNotification = () => {
+  if (isDevelopmentMode) {
+    // Если режим разработки, задачи запланированы через 3 секунд от текущего времени
+    const now = new Date();
+    const sevenSecondsLater = new Date(now.getTime() + 3000); // 3 секунд спустя
+    schedule.scheduleJob(sevenSecondsLater, async () => {
+      await sendUnmergedMergeRequestsNotification(true);
+    });
+  } else {
+    // Если обычный режим, задачи запланированы на 18:00 по московскому времени каждый день
+    schedule.scheduleJob('0 18 * * *', async () => {
+      await sendUnmergedMergeRequestsNotification();
+    });
+
+    // Запланировать уведомление о невлитых МРах на 10:00 утра по московскому времени каждый день
+    schedule.scheduleJob('0 10 * * *', async () => {
+      await sendUnmergedMergeRequestsNotification(true);
+    });
+  }
+};
+
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  // if (ctx.chat.id.toString() !== TG_FRONT_TEAM_CHAT_ID.toString()) return;
+  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
 
   await resetMrCounterIfNeeded();
 
@@ -534,13 +576,20 @@ const addUser = async (ctx, messengerNick, gitlabName) => {
   );
 };
 
-loadDevelopmentMode();
-loadUserList();
-loadExcludedUsers();
-loadSuggestions();
-loadMrCounter();
-resetMrCounterIfNeeded();
-loadScheduledJobs();
+const initializeBot = async () => {
+  await loadDevelopmentMode(); // Загружаем режим разработки
+  await loadUserList(); // Загружаем список пользователей
+  await loadExcludedUsers(); // Загружаем исключенных пользователей
+  await loadSuggestions(); // Загружаем предложения
+  await loadMrCounter(); // Загружаем счетчик МР
+  await resetMrCounterIfNeeded(); // Сбрасываем счетчики, если нужно
+  await loadScheduledJobs(); // Загружаем задачи планировщика
+  await loadMergeRequests(); // Загружаем Merge Requests
+  scheduleUnmergedMergeRequestsNotification(); // Запланируем уведомления о невлитых МР
+};
+
+// Запуск инициализации
+initializeBot();
 
 // Функция для управления сессиями
 const getSession = (chatId) => {
@@ -643,6 +692,79 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
       disable_web_page_preview: true,
     },
   );
+};
+
+const sendUnmergedMergeRequestsInfo = async (ctx) => {
+  await updateMergeRequestsStatus(); // Обновляем информацию о статусах
+
+  const currentDate = moment().startOf('day'); // Начало текущего дня
+
+  // Фильтруем невлитые МР, созданные до начала текущего дня
+  const unmergedMRs = mergeRequests.filter((mr) => {
+    const mrCreationDate = moment(mr.createdAt); // Дата создания МР
+    return mr.approvalsLeft > 0 && mrCreationDate.isBefore(currentDate); // МР, созданные до начала текущего дня
+  });
+
+  if (unmergedMRs.length === 0) {
+    await ctx.reply('Все Мрчики влиты😍');
+    return;
+  }
+
+  const messageParts = unmergedMRs.map((mr) => `${mr.url} - осталось аппрувов: ${mr.approvalsLeft}`);
+  const message = `Невлитые Merge Requests:\n\n${messageParts.join('\n')}`;
+
+  await ctx.reply(message);
+};
+
+const updateMergeRequestsStatus = async () => {
+  try {
+    for (const mr of mergeRequests) {
+      try {
+        const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${mr.projectId}/merge_requests/${mr.mrId}/approvals`;
+        const { data: mrStatusResponse, status: mrStatusStatus } = await axiosInstance.get(mrStatusUrl);
+        if (mrStatusStatus === 200) {
+          mr.approvalsLeft = mrStatusResponse.approvals_left || 0;
+          mr.state = mrStatusResponse.state;
+          if (mr.state === 'merged' || mr.state === 'closed' || mr.approvalsLeft <= 0) {
+            mr.remove = true; // Помечаем для удаления
+          }
+        }
+      } catch (err) {
+        await sendServiceMessage(`Ошибка обновления статуса для МР: ${mr.url}:`);
+      }
+    }
+
+    // Удаление устаревших МР
+    mergeRequests = mergeRequests.filter((mr) => !mr.remove);
+    await saveMergeRequests(mergeRequests);
+  } catch (error) {
+    await sendServiceMessage('Ошибка при обновлении статусов МР.');
+  }
+};
+
+const sendUnmergedMergeRequestsNotification = async (isMorning = false) => {
+  await updateMergeRequestsStatus(); // Обновляем информацию о статусах
+
+  const currentDate = moment().startOf('day'); // Начало текущего дня
+
+  // Фильтруем невлитые МР, созданные до начала текущего дня
+  const unmergedMRs = mergeRequests.filter((mr) => {
+    const mrCreationDate = moment(mr.createdAt); // Дата создания МР
+    return mr.approvalsLeft > 0 && mrCreationDate.isBefore(currentDate); // МР, созданные до начала текущего дня
+  });
+
+  if (unmergedMRs.length === 0) {
+    return; // Если нет невлитых МРов, не отправляем уведомление
+  }
+
+  const messageParts = unmergedMRs.map((mr) => `${mr.url} - осталось аппрувов: ${mr.approvalsLeft}`);
+  const message = `Уважаемые товарищи👷🏼‍♀👷🏼‍♂\nРабочий день ${isMorning ? 'только начинается' : 'заканчивается'}, а у нас все еще есть невлитые ${isMorning ? 'с вчерашнего дня' : ''} МРчики:\n\n${messageParts.join(
+    '\n',
+  )}\n\nПросьба пройтись ${isMorning ? '' : ', чтобы авторы МРов могли отправиться домой с чистой совестью.'}`;
+
+  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
+
+  await sendMessageToChat(targetTeamChatId, message);
 };
 
 const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
@@ -821,6 +943,17 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
+
+        mergeRequests.push({
+          url: mrUrl,
+          approvalsLeft: 2,
+          author: authorNick,
+          projectId,
+          mrId,
+          createdAt: mrStatusResponse.created_at,
+        });
+        await saveMergeRequests(mergeRequests); // Сохраняем МР
+
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
@@ -1110,6 +1243,15 @@ bot.command('all', async (ctx) => {
 
   // Отправляем сообщение в чат с экранированием символов
   await ctx.reply(message);
+});
+
+bot.command('mrinfo', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    // Проверяем, является ли пользователь администратором
+    await sendUnmergedMergeRequestsInfo(ctx);
+  } else {
+    await ctx.reply('У вас нет прав для выполнения этой команды.');
+  }
 });
 
 bot.on(':voice', async (ctx) => {

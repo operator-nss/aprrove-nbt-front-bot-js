@@ -1,3 +1,11 @@
 {
-  "ignore": ["bd/userList.json", "bd/excludedUsers.json", "bd/suggestions.json", "bd/mrCounter.json", "bd/developmentMode.json", "bd/scheduledJobs.json"]
+  "ignore": [
+    "bd/userList.json",
+    "bd/excludedUsers.json",
+    "bd/suggestions.json",
+    "bd/mrCounter.json",
+    "bd/developmentMode.json",
+    "bd/scheduledJobs.json",
+    "bd/mergeRequests.json"
+  ]
 }
