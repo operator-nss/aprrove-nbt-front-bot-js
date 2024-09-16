@@ -85,10 +85,7 @@ const sendServiceMessage = async (message, userId = null, username = null, ignor
     // Определяем целевой чат в зависимости от режима разработки
     const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
     if (!userId && !username)
-      return await sendMessageToChat(
-        targetChatId,
-        `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : ''}`,
-      );
+      return await sendMessageToChat(targetChatId, `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : ''}`);
 
     if (ignoreLogging || loggingEnabled) {
       // Формируем сообщение с добавлением информации о пользователе, который инициировал действие
@@ -236,15 +233,19 @@ const scheduleJob = (job) => {
     schedule.scheduleJob(
       notifyDayBefore,
       moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
-      () => {
-        sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
+      async () => {
+        await sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
       },
     );
 
     // Запланировать уведомление в день включения в 10:15
-    schedule.scheduleJob(notifyDayOf, moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(), () => {
-      sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
-    });
+    schedule.scheduleJob(
+      notifyDayOf,
+      moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
+      async () => {
+        await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+      },
+    );
 
     // Запланировать включение разработчика в 21:00 за день до includeDate
     schedule.scheduleJob(
@@ -253,7 +254,7 @@ const scheduleJob = (job) => {
       async () => {
         await includeUserByDate(username, false);
         await sendMessageToChat(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
-        await sendMessageToChat(DEV_CHAT_ID, `Разработчик ${username} активирован по планировщику!`);
+        await sendMessageToChat(targetServiceChatId, `Разработчик ${username} активирован по планировщику!`);
       },
     );
   }
@@ -627,9 +628,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         }
 
         if (mergeRequestState?.toLowerCase() === 'merged') {
-           allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
+          allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
           success = true;
-           continue;
+          continue;
         }
 
         if (mergeRequestState?.toLowerCase() === 'closed') {
