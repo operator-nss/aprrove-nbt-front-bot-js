@@ -744,16 +744,13 @@ const updateMergeRequestsStatus = async () => {
 const sendUnmergedMergeRequestsNotification = async (isMorning = false) => {
   await updateMergeRequestsStatus(); // Обновляем информацию о статусах
 
-  const currentDate = moment().startOf('day'); // Начало текущего дня
-
   // Фильтруем невлитые МР, созданные до начала текущего дня
   const unmergedMRs = mergeRequests.filter((mr) => {
-    const mrCreationDate = moment(mr.createdAt); // Дата создания МР
-    return mr.approvalsLeft > 0 && mrCreationDate.isBefore(currentDate); // МР, созданные до начала текущего дня
+    return mr.state !== 'merged';
   });
 
   if (unmergedMRs.length === 0) {
-    return; // Если нет невлитых МРов, не отправляем уведомление
+    return;
   }
 
   const messageParts = unmergedMRs.map((mr) => `${mr.url} - осталось аппрувов: ${mr.approvalsLeft}`);
