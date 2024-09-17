@@ -735,7 +735,7 @@ const sendUnmergedMergeRequestsInfo = async (ctx) => {
   }
 
   const messageParts = unmergedMRs.map(
-    (mr) => `${mr.url} - ${mr.approvalsLeft === 0 ? `МР ожидает влития` : `осталось аппрувов: ${mr.approvalsLeft}`} `,
+    (mr) => `${mr.url}\n- ${mr.approvalsLeft === 0 ? `МР ожидает влития` : `осталось аппрувов: ${mr.approvalsLeft}`} `,
   );
   const message = `Невлитые Merge Requests:\n\n${messageParts.join('\n')}`;
 
@@ -1273,7 +1273,6 @@ bot.command('all', async (ctx) => {
 
 bot.command('mrinfo', async (ctx) => {
   if (await isAdmin(ctx)) {
-    // Проверяем, является ли пользователь администратором
     await sendUnmergedMergeRequestsInfo(ctx);
   } else {
     await ctx.reply('У вас нет прав для выполнения этой команды.');
