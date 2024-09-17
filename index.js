@@ -697,12 +697,9 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
 const sendUnmergedMergeRequestsInfo = async (ctx) => {
   await updateMergeRequestsStatus(); // Обновляем информацию о статусах
 
-  const currentDate = moment().startOf('day'); // Начало текущего дня
-
   // Фильтруем невлитые МР, созданные до начала текущего дня
   const unmergedMRs = mergeRequests.filter((mr) => {
-    const mrCreationDate = moment(mr.createdAt); // Дата создания МР
-    return mr.approvalsLeft > 0 && mrCreationDate.isBefore(currentDate); // МР, созданные до начала текущего дня
+    return mr.state !== 'merged';
   });
 
   if (unmergedMRs.length === 0) {
@@ -710,7 +707,9 @@ const sendUnmergedMergeRequestsInfo = async (ctx) => {
     return;
   }
 
-  const messageParts = unmergedMRs.map((mr) => `${mr.url} - осталось аппрувов: ${mr.approvalsLeft}`);
+  const messageParts = unmergedMRs.map(
+    (mr) => `${mr.url} - ${mr.approvalsLeft === 0 ? `МР ожидает влития` : `осталось аппрувов: ${mr.approvalsLeft}`} `,
+  );
   const message = `Невлитые Merge Requests:\n\n${messageParts.join('\n')}`;
 
   await ctx.reply(message);
@@ -725,7 +724,7 @@ const updateMergeRequestsStatus = async () => {
         if (mrStatusStatus === 200) {
           mr.approvalsLeft = mrStatusResponse.approvals_left || 0;
           mr.state = mrStatusResponse.state;
-          if (mr.state === 'merged' || mr.state === 'closed' || mr.approvalsLeft <= 0) {
+          if (mr.state === 'merged' || mr.state === 'closed') {
             mr.remove = true; // Помечаем для удаления
           }
         }
