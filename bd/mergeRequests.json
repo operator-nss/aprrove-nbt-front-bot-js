@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.ui.kit/-/merge_requests/726",
+    "approvalsLeft": 2,
+    "author": "@margaritagaysina",
+    "projectId": 293,
+    "mrId": "726",
+    "createdAt": "2024-09-17T13:11:33.602Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.ui.kit/-/merge_requests/727",
+    "approvalsLeft": 1,
+    "author": "@kalisteo",
+    "projectId": 293,
+    "mrId": "727",
+    "createdAt": "2024-09-17T13:17:39.028Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3608",
+    "approvalsLeft": 0,
+    "author": "@IIvangelion",
+    "projectId": 291,
+    "mrId": "3608",
+    "createdAt": "2024-09-17T13:54:42.069Z",
+    "state": "opened"
+  }
+]
