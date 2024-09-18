@@ -13,7 +13,7 @@ import {
   getUserTimeMessage,
   timeZone,
 } from './helpers.js';
-import { calendarOptions, manyMrPhrases, motivationalMessages } from './constants.js';
+import { calendarOptions, fileChangeMessages, manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
@@ -133,13 +133,6 @@ const checkChatValidity = async () => {
     await sendMessageToChat(OWNER_ID, `Результаты проверки чатов:\n${finalMessage}`);
   }
 };
-
-// Проверка валидности чатов при запуске бота
-bot.start({
-  onStart: async () => {
-    await checkChatValidity();
-  },
-});
 
 export const sendMessageToChat = async (chatId, message) => {
   try {
@@ -841,10 +834,18 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
+        const mergeRequestChangesCount = !!mrStatusResponse?.changes_count
+          ? parseInt(mrStatusResponse?.changes_count, 10)
+          : 0;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
 
         if (!!mergeRequestPipelineFailed) {
           allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
+        }
+
+        if (mergeRequestChangesCount && typeof mergeRequestChangesCount === 'number' && mergeRequestChangesCount > 10) {
+          const message = getRandomPhraseWithCounter(fileChangeMessages, mergeRequestChangesCount);
+          allAnswers += `\n${message}\n`;
         }
 
         if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
@@ -960,15 +961,17 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
 
-        mergeRequests.push({
-          url: mrUrl,
-          approvalsLeft: 2,
-          author: authorNick,
-          projectId,
-          mrId,
-          createdAt: mrStatusResponse.created_at,
-        });
-        await saveMergeRequests(mergeRequests); // Сохраняем МР
+        if (!isDevelopmentMode) {
+          mergeRequests.push({
+            url: mrUrl,
+            approvalsLeft: 2,
+            author: authorNick,
+            projectId,
+            mrId,
+            createdAt: mrStatusResponse.created_at || null,
+          });
+          await saveMergeRequests(mergeRequests); // Сохраняем МР
+        }
 
         success = true; // Устанавливаем флаг успешного выполнения
       }
@@ -1518,6 +1521,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
 // Запуск бота
 bot.start({
   onStart: async () => {
-    await checkChatValidity();
+    // await checkChatValidity();
   },
 });
