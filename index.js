@@ -197,12 +197,6 @@ const loadScheduledJobs = async () => {
       const [username, taskType] = name.split('_');
       const date = new Date(nextInvocation);
 
-      // if (name.includes('daily_unmerged_mr_notification_18')) {
-      //   return
-      // } else if (name.includes('daily_unmerged_mr_notification_10')) {
-      //  return;
-      // }
-
       if (taskType === 'notify') {
         if (name.includes('day_before')) {
           scheduleJob({

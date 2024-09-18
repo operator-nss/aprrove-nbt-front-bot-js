@@ -1,6 +1,8 @@
 import moment from 'moment-timezone';
 moment.locale('ru'); // Устанавливаем локаль на русский
 import { funnyPhrases } from './constants.js';
+import fs from 'fs';
+import path from 'path';
 export const timeZone = 'Europe/Moscow';
 
 export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('merge_requests');
