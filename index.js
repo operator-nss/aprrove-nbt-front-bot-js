@@ -200,17 +200,11 @@ const loadScheduledJobs = async () => {
       const [username, taskType] = name.split('_');
       const date = new Date(nextInvocation);
 
-      if (name.includes('daily_unmerged_mr_notification_18')) {
-        schedule.scheduleJob(name, date, async () => {
-          await sendUnmergedMergeRequestsNotification();
-          await saveScheduledJobs();
-        });
-      } else if (name.includes('daily_unmerged_mr_notification_10')) {
-        schedule.scheduleJob(name, date, async () => {
-          await sendUnmergedMergeRequestsNotification(true);
-          await saveScheduledJobs();
-        });
-      }
+      // if (name.includes('daily_unmerged_mr_notification_18')) {
+      //   return
+      // } else if (name.includes('daily_unmerged_mr_notification_10')) {
+      //  return;
+      // }
 
       if (taskType === 'notify') {
         if (name.includes('day_before')) {
@@ -477,34 +471,26 @@ const resetMrCounterIfNeeded = async () => {
 // Функция для планирования уведомлений о невлитых Merge Requests
 const scheduleUnmergedMergeRequestsNotification = async () => {
   if (isDevelopmentMode) {
-    // Если режим разработки, задачи запланированы через 3 секунд от текущего времени
-    const now = new Date();
-    const targetTime = new Date(now);
-    targetTime.setHours(21, 33, 0, 0);
-
-    const sevenSecondsLater = new Date(now.getTime() + 3000); // 3 секунд спустя
-    schedule.scheduleJob(sevenSecondsLater, async () => {
-      await sendUnmergedMergeRequestsNotification(true);
-    });
-
-    // schedule.scheduleJob('dev_unmerged_mr_notification-18', '6 22 * * *', async () => {
+    // schedule.scheduleJob('dev_unmerged_mr_notification-18', '04 21 * * *', async () => {
     //   await sendUnmergedMergeRequestsNotification(true);
+    //   // await scheduleUnmergedMergeRequestsNotification();
     // });
     //
-    // schedule.scheduleJob('dev_unmerged_mr_notification-10', '7 22 * * *', async () => {
+    // schedule.scheduleJob('dev_unmerged_mr_notification-10', '05 21 * * *', async () => {
     //   await sendUnmergedMergeRequestsNotification();
+    //   // await scheduleUnmergedMergeRequestsNotification();
     // });
+    //
+    // await saveScheduledJobs();
   } else {
     // Если обычный режим, задачи запланированы на 18:00 по московскому времени каждый день
     schedule.scheduleJob('daily_unmerged_mr_notification_18', '0 18 * * *', async () => {
       await sendUnmergedMergeRequestsNotification();
-      await scheduleUnmergedMergeRequestsNotification();
     });
 
     // Запланировать уведомление о невлитых МРах на 10:00 утра по московскому времени каждый день
     schedule.scheduleJob('daily_unmerged_mr_notification_10', '0 10 * * *', async () => {
       await sendUnmergedMergeRequestsNotification(true);
-      await scheduleUnmergedMergeRequestsNotification();
     });
 
     await saveScheduledJobs();
@@ -789,7 +775,7 @@ const sendUnmergedMergeRequestsNotification = async (isMorning = false) => {
   );
   const message = `Уважаемые товарищи👷🏼‍♀👷🏼‍♂\nРабочий день ${isMorning ? 'только начинается' : 'заканчивается'}, а у нас все еще есть невлитые ${isMorning ? 'с вчерашнего дня' : ''} МРчики:\n\n${messageParts.join(
     '\n',
-  )}\n\nПросьба пройтись ${isMorning ? '' : ', чтобы авторы МРов могли отправиться домой с чистой совестью.'}`;
+  )}\n\nПросьба пройтись влить/доапрувнуть МРчики ${isMorning ? '' : ', чтобы авторы МРов могли отправиться домой с чистой совестью.'}`;
 
   const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
 
@@ -1494,6 +1480,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
       await ctx.reply('Режим разработки включен.');
       await sendServiceMessage(`Режим разработки включен🚧`, ctx.from.id, ctx.from.username, true);
       await showMenu(ctx);
+      await scheduleUnmergedMergeRequestsNotification();
       break;
     case 'disable_dev_mode':
       await ctx.reply('Режим разработки выключен.');
@@ -1501,6 +1488,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
       isDevelopmentMode = false;
       await saveDevelopmentMode();
       await showMenu(ctx);
+      await scheduleUnmergedMergeRequestsNotification();
       break;
     case 'cancel':
       session.awaitingUserInput = false;
