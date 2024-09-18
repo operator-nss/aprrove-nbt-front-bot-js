@@ -84,6 +84,11 @@ export const getUserTimeMessage = (ctx) => {
 };
 
 export const formatDate = (dateText) => moment(dateText).format('DD MMMM YYYY');
+
 export const formatDateTime = (date) => {
   return moment(date).tz(timeZone).format('DD MMMM YYYY в HH:mm');
+};
+
+export const isChatNotTeam = (ctx, teamChatId) => {
+  return ctx.chat.id.toString() !== teamChatId.toString();
 };

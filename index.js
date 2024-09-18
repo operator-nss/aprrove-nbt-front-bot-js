@@ -5,6 +5,7 @@ import schedule from 'node-schedule';
 import dotenv from 'dotenv';
 import {
   checkMr,
+  isChatNotTeam,
   formatDate,
   formatDateTime,
   getEveningMessage,
@@ -495,7 +496,7 @@ const scheduleUnmergedMergeRequestsNotification = async () => {
 
 const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
-  if (ctx.chat.id.toString() !== TG_TEAM_CHAT_ID.toString()) return;
+  if (isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) return;
 
   await resetMrCounterIfNeeded();
 
@@ -702,7 +703,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   const timeMessage = getUserTimeMessage(ctx);
   await ctx.reply(
     getEveningMessage(
-      `Назначены ревьюверы:${isDevelopmentMode ? ' simpleChooseReviewers ' : ''} ${reviewerMentions}`,
+      `Назначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' simpleChooseReviewers ' : ''} ${reviewerMentions}`,
       timeMessage,
     ),
     {
@@ -971,7 +972,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           (lead) => lead.gitlabName === selectedCheckMrNick,
         ).messengerNick;
 
-        allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
+        allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
 
         if (!isDevelopmentMode) {
