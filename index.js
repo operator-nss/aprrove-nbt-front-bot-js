@@ -525,7 +525,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога
-  if (mrCounter.daily.count % 12 === 0) {
+  if (mrCounter?.daily?.count !== undefined && mrCounter?.daily?.count !== null && mrCounter?.daily?.count % 12 === 0) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
