@@ -498,11 +498,13 @@ const scheduleUnmergedMergeRequestsNotification = async () => {
     // Если обычный режим, задачи запланированы на 18:00 по московскому времени каждый день
     schedule.scheduleJob('daily_unmerged_mr_notification_18', '0 18 * * *', async () => {
       await sendUnmergedMergeRequestsNotification();
+      await scheduleUnmergedMergeRequestsNotification();
     });
 
     // Запланировать уведомление о невлитых МРах на 10:00 утра по московскому времени каждый день
     schedule.scheduleJob('daily_unmerged_mr_notification_10', '0 10 * * *', async () => {
       await sendUnmergedMergeRequestsNotification(true);
+      await scheduleUnmergedMergeRequestsNotification();
     });
 
     await saveScheduledJobs();
@@ -523,7 +525,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога
-  if (mrCounter.daily.count % 10 === 0) {
+  if (mrCounter.daily.count % 12 === 0) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
@@ -531,8 +533,10 @@ const incrementMrCounter = async (ctx, count = 1) => {
 };
 
 const sendMotivationalMessage = async (ctx) => {
-  const message = getRandomPhraseWithCounter(motivationalMessages, mrCounter);
-  await ctx.reply(message);
+  if (mrCounter?.daily?.count) {
+    const message = getRandomPhraseWithCounter(motivationalMessages, mrCounter.daily.count);
+    await ctx.reply(message);
+  }
 };
 
 const loadUserList = async () => {

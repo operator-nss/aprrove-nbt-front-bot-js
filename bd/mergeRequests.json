@@ -1,7 +1,7 @@
 [
   {
     "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.ui.kit/-/merge_requests/726",
-    "approvalsLeft": 2,
+    "approvalsLeft": 0,
     "author": "@margaritagaysina",
     "projectId": 293,
     "mrId": "726",
@@ -9,21 +9,77 @@
     "state": "opened"
   },
   {
-    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.ui.kit/-/merge_requests/727",
+    "url": "https://gitlab.dpr.norbit.ru/nbt-core/microfrontends/-/merge_requests/34",
     "approvalsLeft": 1,
-    "author": "@kalisteo",
-    "projectId": 293,
-    "mrId": "727",
-    "createdAt": "2024-09-17T13:17:39.028Z",
+    "author": "@krr_ruslan",
+    "projectId": 455,
+    "mrId": "34",
+    "createdAt": "2024-09-17T13:08:59.336Z",
     "state": "opened"
   },
   {
-    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3608",
-    "approvalsLeft": 0,
-    "author": "@IIvangelion",
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3610",
+    "approvalsLeft": 1,
+    "author": "@kalisteo",
     "projectId": 291,
-    "mrId": "3608",
-    "createdAt": "2024-09-17T13:54:42.069Z",
+    "mrId": "3610",
+    "createdAt": "2024-09-18T07:10:44.054Z",
     "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3611",
+    "approvalsLeft": 2,
+    "author": "@margaritagaysina",
+    "projectId": 291,
+    "mrId": "3611",
+    "createdAt": "2024-09-18T07:58:36.407Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/services/app/app-frontend/-/merge_requests/59",
+    "approvalsLeft": 2,
+    "author": "@mtyeyes",
+    "projectId": 333,
+    "mrId": "59",
+    "createdAt": "2024-09-18T09:15:50.135Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3612",
+    "approvalsLeft": 2,
+    "author": "@margaritagaysina",
+    "projectId": 291,
+    "mrId": "3612",
+    "createdAt": "2024-09-18T09:24:24.613Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt-core/microfrontends/-/merge_requests/35",
+    "approvalsLeft": 2,
+    "author": "@Pror0k_WH",
+    "projectId": 455,
+    "mrId": "35",
+    "createdAt": "2024-09-18T09:39:04.948Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/services/app/app-frontend/-/merge_requests/60",
+    "approvalsLeft": 2,
+    "author": "@mtyeyes",
+    "projectId": 333,
+    "mrId": "60",
+    "createdAt": "2024-09-18T12:24:21.276Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3613",
+    "approvalsLeft": 2,
+    "author": "@turner_cola",
+    "projectId": 291,
+    "mrId": "3613",
+    "createdAt": "2024-09-18T11:31:26.074Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3614",
+    "approvalsLeft": 2,
+    "author": "@FrontendMaestro",
+    "projectId": 291,
+    "mrId": "3614",
+    "createdAt": "2024-09-18T13:19:09.540Z"
   }
 ]

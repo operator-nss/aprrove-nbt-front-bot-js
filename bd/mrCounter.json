@@ -1,14 +1,14 @@
 {
   "daily": {
-    "count": 9,
-    "lastResetDate": "2024-09-17"
+    "count": 11,
+    "lastResetDate": "2024-09-18"
   },
   "monthly": {
-    "count": 9,
+    "count": 20,
     "lastResetMonth": "2024-09"
   },
   "yearly": {
-    "count": 9,
+    "count": 20,
     "lastResetYear": "2024"
   }
 }
