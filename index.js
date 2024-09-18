@@ -27,6 +27,8 @@ const SERVICE_CHAT_ID = process.env.SERVICE_CHAT_ID; // Чат для отлад
 const TG_TEAM_CHAT_ID = process.env.TG_TEAM_CHAT_ID; // ID чата команды в телеграмме
 const OWNER_ID = process.env.OWNER_ID; // ID разработчика бота
 const DEV_CHAT_ID = process.env.DEV_CHAT_ID; // ID чата разработчика в Телеграм
+const MR_MOTIVATION_MESSAGE_COUNT = process.env.MR_MOTIVATION_MESSAGE_COUNT; // через какое кол-во Мров будет мотивационное сообщение
+const MR_CHANGES_COUNT = process.env.MR_CHANGES_COUNT; // количество измененных файлов в мре
 
 // Создаем бота
 const bot = new Bot(TOKEN);
@@ -64,6 +66,12 @@ let mergeRequests;
 
 // Переменная для хранения состояния режима разработки
 let isDevelopmentMode = false;
+
+// Переменная кол-во Мров? через которое будет мотивационное сообщение
+const mrMotivationMessageCount = parseInt(MR_MOTIVATION_MESSAGE_COUNT, 10) || 12;
+
+// количество измененных файлов в мре
+const mrChangesCount = parseInt(MR_CHANGES_COUNT, 10) || 12;
 
 let calendarData = {
   isOpen: false,
@@ -499,7 +507,11 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога
-  if (mrCounter?.daily?.count !== undefined && mrCounter?.daily?.count !== null && mrCounter?.daily?.count % 12 === 0) {
+  if (
+    mrCounter?.daily?.count !== undefined &&
+    mrCounter?.daily?.count !== null &&
+    mrCounter?.daily?.count % mrMotivationMessageCount === 0
+  ) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
@@ -840,7 +852,11 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
         }
 
-        if (mergeRequestChangesCount && typeof mergeRequestChangesCount === 'number' && mergeRequestChangesCount > 10) {
+        if (
+          mergeRequestChangesCount &&
+          typeof mergeRequestChangesCount === 'number' &&
+          mergeRequestChangesCount > mrChangesCount
+        ) {
           const message = getRandomPhraseWithCounter(fileChangeMessages, mergeRequestChangesCount);
           allAnswers += `\n${message}\n`;
         }
