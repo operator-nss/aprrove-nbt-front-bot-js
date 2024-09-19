@@ -1,14 +1,5 @@
 [
   {
-    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3613",
-    "approvalsLeft": 0,
-    "author": "@turner_cola",
-    "projectId": 291,
-    "mrId": "3613",
-    "createdAt": "2024-09-18T11:31:26.074Z",
-    "state": "opened"
-  },
-  {
     "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3614",
     "approvalsLeft": 0,
     "author": "@FrontendMaestro",
@@ -16,13 +7,5 @@
     "mrId": "3614",
     "createdAt": "2024-09-18T13:19:09.540Z",
     "state": "opened"
-  },
-  {
-    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3614",
-    "approvalsLeft": 2,
-    "author": "@FrontendMaestro",
-    "projectId": 291,
-    "mrId": "3614",
-    "createdAt": "2024-09-18T13:19:09.540Z"
   }
 ]

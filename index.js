@@ -197,6 +197,18 @@ const loadScheduledJobs = async () => {
       const [username, taskType] = name.split('_');
       const date = new Date(nextInvocation);
 
+      if (name.includes('daily_unmerged_mr_notification_18')) {
+        schedule.scheduleJob(name, date, async () => {
+          await sendUnmergedMergeRequestsNotification();
+          await saveScheduledJobs();
+        });
+      } else if (name.includes('daily_unmerged_mr_notification_10')) {
+        schedule.scheduleJob(name, date, async () => {
+          await sendUnmergedMergeRequestsNotification(true);
+          await saveScheduledJobs();
+        });
+      }
+
       if (taskType === 'notify') {
         if (name.includes('day_before')) {
           scheduleJob({
@@ -969,17 +981,15 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
 
-        if (!isDevelopmentMode) {
-          mergeRequests.push({
-            url: mrUrl,
-            approvalsLeft: 2,
-            author: authorNick,
-            projectId,
-            mrId,
-            createdAt: mrStatusResponse.created_at || null,
-          });
-          await saveMergeRequests(mergeRequests); // Сохраняем МР
-        }
+        mergeRequests.push({
+          url: mrUrl,
+          approvalsLeft: 2,
+          author: authorNick,
+          projectId,
+          mrId,
+          createdAt: mrStatusResponse.created_at || null,
+        });
+        await saveMergeRequests(mergeRequests); // Сохраняем МР
 
         success = true; // Устанавливаем флаг успешного выполнения
       }
