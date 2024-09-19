@@ -786,7 +786,7 @@ const sendUnmergedMergeRequestsNotification = async (isMorning = false) => {
     '\n',
   )}\n\nПросьба пройтись влить/доапрувнуть МРчики ${isMorning ? '' : ', чтобы авторы МРов могли отправиться домой с чистой совестью.'}`;
 
-  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
+  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
 
   await sendMessageToChat(targetTeamChatId, message);
   await saveScheduledJobs();
@@ -850,10 +850,16 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
+        const mergeRequestConflicts = mrStatusResponse?.has_conflicts ?? false;
+
         const mergeRequestChangesCount = !!mrStatusResponse?.changes_count
           ? parseInt(mrStatusResponse?.changes_count, 10)
           : 0;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
+
+        if (!!mergeRequestConflicts) {
+          allAnswers += '\n☠В данном Мре КОНФЛИКТЫ. Посмотри в чем проблема!☠\n';
+        }
 
         if (!!mergeRequestPipelineFailed) {
           allAnswers += '\n🚨В данном Мре упал pipeline. Посмотри в чем проблема!🚨\n';
@@ -865,7 +871,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           mergeRequestChangesCount > mrChangesCount
         ) {
           const message = getRandomPhraseWithCounter(fileChangeMessages, mergeRequestChangesCount);
-          allAnswers += `\n${message}\n`;
+          allAnswers += `\n${message}`;
         }
 
         if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
@@ -981,14 +987,17 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
         await incrementMrCounter(ctx); // Одобавляем + 1 к счетчику МРов
 
-        mergeRequests.push({
-          url: mrUrl,
-          approvalsLeft: 2,
-          author: authorNick,
-          projectId,
-          mrId,
-          createdAt: mrStatusResponse.created_at || null,
-        });
+        if (!isDevelopmentMode) {
+          mergeRequests.push({
+            url: mrUrl,
+            approvalsLeft: 2,
+            author: authorNick,
+            projectId,
+            mrId,
+            createdAt: mrStatusResponse.created_at || null,
+          });
+        }
+
         await saveMergeRequests(mergeRequests); // Сохраняем МР
 
         success = true; // Устанавливаем флаг успешного выполнения
