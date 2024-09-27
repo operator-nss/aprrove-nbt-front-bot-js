@@ -1,11 +1,79 @@
 [
   {
-    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3618",
-    "approvalsLeft": 1,
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3634",
+    "approvalsLeft": 0,
     "author": "@Ikulai_frontDev",
     "projectId": 291,
-    "mrId": "3618",
-    "createdAt": "2024-09-19T13:42:58.036Z",
+    "mrId": "3634",
+    "createdAt": "2024-09-23T11:16:33.884Z",
     "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3636",
+    "approvalsLeft": 0,
+    "author": "@turner_cola",
+    "projectId": 291,
+    "mrId": "3636",
+    "createdAt": "2024-09-23T14:21:35.015Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3658",
+    "approvalsLeft": 0,
+    "author": "@FrontendMaestro",
+    "projectId": 291,
+    "mrId": "3658",
+    "createdAt": "2024-09-26T09:52:38.726Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt-core/microfrontends/-/merge_requests/50",
+    "approvalsLeft": 1,
+    "author": "@Pror0k_WH",
+    "projectId": 455,
+    "mrId": "50",
+    "createdAt": "2024-09-25T07:51:28.747Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3659",
+    "approvalsLeft": 2,
+    "author": "@krr_ruslan",
+    "projectId": 291,
+    "mrId": "3659",
+    "createdAt": "2024-09-26T13:58:09.763Z",
+    "state": "opened"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt-core/microfrontends/-/merge_requests/50",
+    "approvalsLeft": 2,
+    "author": "@Pror0k_WH",
+    "projectId": 455,
+    "mrId": "50",
+    "createdAt": "2024-09-25T07:51:28.747Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3660",
+    "approvalsLeft": 2,
+    "author": "@FrontendMaestro",
+    "projectId": 291,
+    "mrId": "3660",
+    "createdAt": "2024-09-27T09:33:39.045Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3659",
+    "approvalsLeft": 2,
+    "author": "@Natali_Kniazeva",
+    "projectId": 291,
+    "mrId": "3659",
+    "createdAt": "2024-09-26T13:58:09.763Z"
+  },
+  {
+    "url": "https://gitlab.dpr.norbit.ru/nbt/nbt.web.client/-/merge_requests/3661",
+    "approvalsLeft": 2,
+    "author": "@kalisteo",
+    "projectId": 291,
+    "mrId": "3661",
+    "createdAt": "2024-09-27T10:52:21.476Z"
   }
 ]
