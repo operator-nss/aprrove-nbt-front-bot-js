@@ -269,77 +269,77 @@ const scheduleJob = (job) => {
   const activateAtNight = `${username}_activate_at_night`;
 
   // if (isDevelopmentMode) {
-    // console.log('notifyDayBefore', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).format());
-    // console.log('notifyDayOf', moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).format());
-    // console.log('activateAtNight', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).format());
-    // Если режим разработки, задачи запланированы через 1, 2 и 3 минуты от текущего времени
-    // const now = new Date();
-    // // const fiveSecondsLater = new Date(now.getTime() + 500 * 1000); // 5 секунд спустя
-    //
-    // const fiveSecondsLater = moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(); // 5 секунд спустя
-    // // const tenSecondsLater = new Date(now.getTime() + 1000 * 1000); // 10 секунд спустя
-    // const tenSecondsLater = moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(); // 10 секунд спустя
-    // // const fifteenSecondsLater = new Date(now.getTime() + 1500 * 1000); // 15 секунд спустя
-    // const fifteenSecondsLater = moment
-    //   .tz(includeDate, timeZone)
-    //   .subtract(1, 'days')
-    //   .set({ hour: 21, minute: 0 })
-    //   .toDate(); // 15 секунд спустя
-    //
-    // schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, async () => {
-    //   await sendMessageToChat(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
-    //   await saveScheduledJobs();
-    // });
-    //
-    // schedule.scheduleJob(notifyDayOf, tenSecondsLater, async () => {
-    //   await includeUserByDate(username, false);
-    //   await sendMessageToChat(OWNER_ID, `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`);
-    //   await sendMessageToChat(
-    //     DEV_CHAT_ID,
-    //     `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`,
-    //   );
-    //   await saveScheduledJobs();
-    // });
-    //
-    // schedule.scheduleJob(activateAtNight, fifteenSecondsLater, async () => {
-    //   await sendMessageToChat(
-    //     DEV_CHAT_ID,
-    //     `Тестовое уведомление: Всем привет! ${username} вышел на работу и может быть назначен ревьювером!`,
-    //   );
-    //   await saveScheduledJobs();
-    // });
+  // console.log('notifyDayBefore', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).format());
+  // console.log('notifyDayOf', moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).format());
+  // console.log('activateAtNight', moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).format());
+  // Если режим разработки, задачи запланированы через 1, 2 и 3 минуты от текущего времени
+  // const now = new Date();
+  // // const fiveSecondsLater = new Date(now.getTime() + 500 * 1000); // 5 секунд спустя
+  //
+  // const fiveSecondsLater = moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(); // 5 секунд спустя
+  // // const tenSecondsLater = new Date(now.getTime() + 1000 * 1000); // 10 секунд спустя
+  // const tenSecondsLater = moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(); // 10 секунд спустя
+  // // const fifteenSecondsLater = new Date(now.getTime() + 1500 * 1000); // 15 секунд спустя
+  // const fifteenSecondsLater = moment
+  //   .tz(includeDate, timeZone)
+  //   .subtract(1, 'days')
+  //   .set({ hour: 21, minute: 0 })
+  //   .toDate(); // 15 секунд спустя
+  //
+  // schedule.scheduleJob(notifyDayBefore, fiveSecondsLater, async () => {
+  //   await sendMessageToChat(DEV_CHAT_ID, `Тестовое уведомление: Завтра выходит ${username}`);
+  //   await saveScheduledJobs();
+  // });
+  //
+  // schedule.scheduleJob(notifyDayOf, tenSecondsLater, async () => {
+  //   await includeUserByDate(username, false);
+  //   await sendMessageToChat(OWNER_ID, `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`);
+  //   await sendMessageToChat(
+  //     DEV_CHAT_ID,
+  //     `Тестовое уведомление: Разработчик ${username} активирован по планировщику!`,
+  //   );
+  //   await saveScheduledJobs();
+  // });
+  //
+  // schedule.scheduleJob(activateAtNight, fifteenSecondsLater, async () => {
+  //   await sendMessageToChat(
+  //     DEV_CHAT_ID,
+  //     `Тестовое уведомление: Всем привет! ${username} вышел на работу и может быть назначен ревьювером!`,
+  //   );
+  //   await saveScheduledJobs();
+  // });
   // } else {
-    // Запланировать уведомление за день до включения
-    schedule.scheduleJob(
-      notifyDayBefore,
-      moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
-      async () => {
-        await sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
-        await saveScheduledJobs();
-      },
-    );
+  // Запланировать уведомление за день до включения
+  schedule.scheduleJob(
+    notifyDayBefore,
+    moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 10, minute: 15 }).toDate(),
+    async () => {
+      await sendMessageToChat(targetServiceChatId, `Завтра активируется ревьювер ${username}`);
+      await saveScheduledJobs();
+    },
+  );
 
-    // Запланировать уведомление в день включения в 10:15
-    schedule.scheduleJob(
-      notifyDayOf,
-      moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
-      async () => {
-        await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
-        await saveScheduledJobs();
-      },
-    );
+  // Запланировать уведомление в день включения в 10:15
+  schedule.scheduleJob(
+    notifyDayOf,
+    moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
+    async () => {
+      await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
+      await saveScheduledJobs();
+    },
+  );
 
-    // Запланировать включение разработчика в 21:00 за день до includeDate
-    schedule.scheduleJob(
-      activateAtNight,
-      moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(),
-      async () => {
-        await includeUserByDate(username, false);
-        await sendMessageToChat(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
-        await sendMessageToChat(targetServiceChatId, `Разработчик ${username} активирован по планировщику!`);
-        await saveScheduledJobs();
-      },
-    );
+  // Запланировать включение разработчика в 21:00 за день до includeDate
+  schedule.scheduleJob(
+    activateAtNight,
+    moment.tz(includeDate, timeZone).subtract(1, 'days').set({ hour: 21, minute: 0 }).toDate(),
+    async () => {
+      await includeUserByDate(username, false);
+      await sendMessageToChat(OWNER_ID, `Разработчик ${username} активирован по планировщику!`);
+      await sendMessageToChat(targetServiceChatId, `Разработчик ${username} активирован по планировщику!`);
+      await saveScheduledJobs();
+    },
+  );
   // }
   saveScheduledJobs();
 };
@@ -454,7 +454,7 @@ const resetMrCounterIfNeeded = async () => {
   if (mrCounter.daily.lastResetDate !== currentDate) {
     mrCounter.daily.count = 0;
     mrCounter.daily.lastResetDate = currentDate;
-    await updateMergeRequestsStatus()
+    await updateMergeRequestsStatus();
   }
 
   // Сброс счетчика за месяц
@@ -851,12 +851,24 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
 
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
+        const mergeRequestLabels = mrStatusResponse?.labels;
         const mergeRequestConflicts = mrStatusResponse?.has_conflicts ?? false;
 
         const mergeRequestChangesCount = !!mrStatusResponse?.changes_count
           ? parseInt(mrStatusResponse?.changes_count, 10)
           : 0;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
+
+        if (mergeRequestLabels.some((label) => label.toLowerCase().includes('блокер'))) {
+          allAnswers += '\n🚨☠Внимание Блокер☠🚨\nПросьба посмотреть оперативно!\n';
+        }
+
+        if (
+          mergeRequestLabels.some((label) => label.toLowerCase().includes('крит')) &&
+          !allAnswers.includes('Внимание Блокер')
+        ) {
+          allAnswers += '\n🚨☠Внимание Крит☠🚨\nПросьба посмотреть оперативно!\n';
+        }
 
         if (!!mergeRequestConflicts) {
           allAnswers += '\n☠В данном Мре КОНФЛИКТЫ. Посмотри в чем проблема!☠\n';
@@ -1123,7 +1135,7 @@ const includeUserByDate = async (username, needSendServiceMessage = true) => {
     await saveExcludedUsers();
 
     // Удаляем задачи для этого пользователя
-   await removeScheduledJobs(username);
+    await removeScheduledJobs(username);
 
     if (needSendServiceMessage) {
       await sendServiceMessage(`Разработчик ${username} автоматически включен.✅`);
@@ -1141,7 +1153,7 @@ const includeUser = async (ctx, username) => {
     await saveExcludedUsers();
 
     // Удаляем задачи для этого пользователя
-   await removeScheduledJobs(username);
+    await removeScheduledJobs(username);
   }
 };
 
@@ -1158,7 +1170,7 @@ const removeScheduledJobs = async (username) => {
   });
 
   // Сохраняем изменения в файл
- await saveScheduledJobs();
+  await saveScheduledJobs();
 };
 
 // Функция для отображения списка пользователей
@@ -1556,6 +1568,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
 // Запуск бота
 bot.start({
   onStart: async () => {
-    // await checkChatValidity();
+    // await sendMessageToChat(TG_TEAM_CHAT_ID, `А что так можно было?)`);
   },
 });
