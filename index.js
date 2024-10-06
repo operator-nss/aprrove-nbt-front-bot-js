@@ -1003,7 +1003,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
-      await sendServiceMessage(`МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`, errors);
+      await sendServiceMessage(`МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`);
       return false; // Если произошла ошибка, возвращаем false
     }
   }
