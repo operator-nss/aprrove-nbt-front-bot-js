@@ -18,16 +18,6 @@ export const calendarOptions = {
   minDate: new Date(new Date().setDate(new Date().getDate() + 1)), // Минимальная дата - завтрашний день
 };
 
-// Список объектов для хранения соответствия между Мессенджером и GitLab никнеймами
-export const userList = [
-  { messengerNick: '@FrontendMaestro', gitlabName: 'Aleksey.Sokolov' },
-  { messengerNick: '@Ikulai_frontDev', gitlabName: 'Ivan.Kulay' },
-  { messengerNick: '@IIvangelion', gitlabName: 'Ivan.Dyatlov' },
-  { messengerNick: '@mtyeyes', gitlabName: 'Stanislav.Konovalov' },
-  { messengerNick: '@Pror0k_WH', gitlabName: 'Evgeny.Kovalev' },
-  { messengerNick: '@krr_ruslan', gitlabName: 'Ruslan.Karamov' },
-];
-
 // Для тех кто работает ночью
 export const funnyPhrases = [
   'Опять за работу, когда все отдыхают?🥴',
