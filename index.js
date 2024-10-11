@@ -195,17 +195,6 @@ const loadScheduledJobs = async () => {
     jobData.forEach(({ name, nextInvocation }) => {
       const [username, taskType] = name.split('__');
       const date = new Date(nextInvocation);
-      // if (name.includes('daily_unmerged_mr_notification_18')) {
-      //   schedule.scheduleJob(name, date, async () => {
-      //     await sendUnmergedMergeRequestsNotification();
-      //     await saveScheduledJobs();
-      //   });
-      // } else if (name.includes('daily_unmerged_mr_notification_10')) {
-      //   schedule.scheduleJob(name, date, async () => {
-      //     await sendUnmergedMergeRequestsNotification(true);
-      //     await saveScheduledJobs();
-      //   });
-      // }
 
       if (taskType === 'notify') {
         if (name.includes('day_before')) {
@@ -431,35 +420,6 @@ const resetMrCounterIfNeeded = async () => {
   }
 
   await saveMrCounter();
-};
-
-// Функция для планирования уведомлений о невлитых Merge Requests
-const scheduleUnmergedMergeRequestsNotification = async () => {
-  if (isDevelopmentMode) {
-    // schedule.scheduleJob('dev_unmerged_mr_notification-18', '04 21 * * *', async () => {
-    //   await sendUnmergedMergeRequestsNotification(true);
-    //   // await scheduleUnmergedMergeRequestsNotification();
-    // });
-    //
-    // schedule.scheduleJob('dev_unmerged_mr_notification-10', '05 21 * * *', async () => {
-    //   await sendUnmergedMergeRequestsNotification();
-    //   // await scheduleUnmergedMergeRequestsNotification();
-    // });
-    //
-    // await saveScheduledJobs();
-  } else {
-    // Если обычный режим, задачи запланированы на 18:00 по московскому времени каждый день
-    // schedule.scheduleJob('daily_unmerged_mr_notification_18', '0 18 * * *', async () => {
-    //   await sendUnmergedMergeRequestsNotification();
-    // });
-    //
-    // // Запланировать уведомление о невлитых МРах на 10:00 утра по московскому времени каждый день
-    // schedule.scheduleJob('daily_unmerged_mr_notification_10', '0 10 * * *', async () => {
-    //   await sendUnmergedMergeRequestsNotification(true);
-    // });
-    //
-    // await saveScheduledJobs();
-  }
 };
 
 const incrementMrCounter = async (ctx, count = 1) => {
@@ -727,31 +687,6 @@ const updateMergeRequestsStatus = async () => {
   } catch (error) {
     await sendServiceMessage('Ошибка при обновлении статусов МР.');
   }
-};
-
-const sendUnmergedMergeRequestsNotification = async (isMorning = false) => {
-  await updateMergeRequestsStatus(); // Обновляем информацию о статусах
-
-  // Фильтруем невлитые МР, созданные до начала текущего дня
-  const unmergedMRs = mergeRequests.filter((mr) => {
-    return mr.state !== 'merged';
-  });
-
-  if (unmergedMRs.length === 0) {
-    return;
-  }
-
-  const messageParts = unmergedMRs.map(
-    (mr) => `${mr.url} - ${mr.approvalsLeft === 0 ? `МР ожидает влития` : `осталось аппрувов: ${mr.approvalsLeft}`} `,
-  );
-  const message = `Уважаемые товарищи👷🏼‍♀👷🏼‍♂\nРабочий день ${isMorning ? 'только начинается' : 'заканчивается'}, а у нас все еще есть невлитые ${isMorning ? 'с вчерашнего дня' : ''} МРчики:\n\n${messageParts.join(
-    '\n',
-  )}\n\nПросьба пройтись влить/доапрувнуть МРчики ${isMorning ? '' : ', чтобы авторы МРов могли отправиться домой с чистой совестью.'}`;
-
-  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
-
-  await sendMessageToChat(targetTeamChatId, message);
-  await saveScheduledJobs();
 };
 
 const assignGitLabReviewers = async (projectId, mergeRequestIid, reviewers) => {
@@ -1084,20 +1019,6 @@ const excludeUserWithDate = async (ctx, username, includeDate) => {
 
     // Планируем задачу
     await scheduleJob({ username, includeDate });
-  }
-};
-
-// Функция для планирования включения разработчика
-const scheduleUserInclusion = (username, includeDate) => {
-  const now = new Date();
-  const inclusionDate = new Date(includeDate);
-
-  const delay = inclusionDate.getTime() - now.getTime();
-
-  if (delay > 0) {
-    setTimeout(async () => {
-      await includeUserByDate(username);
-    }, delay);
   }
 };
 
