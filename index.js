@@ -285,7 +285,7 @@ const scheduleJob = async (job) => {
       moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
       async () => {
         await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
-        await removeScheduledJobs(username);
+        await removeScheduledJobs(username, true);
       },
     );
   }
@@ -1125,13 +1125,17 @@ const includeUser = async (ctx, username) => {
     }
     await saveExcludedUsers();
     // Удаляем задачи для этого пользователя
-    await removeScheduledJobs(username);
+    await removeScheduledJobs(username, true);
   }
 };
 
-const removeScheduledJobs = async (username) => {
+const removeScheduledJobs = async (username, needDeleteAllTasks = false) => {
   // Удаляем все задачи для этого пользователя
-  const jobsToCancel = [`${username}_notify_day_before`, `${username}_notify_day_of`, `${username}_activate_at_night`];
+  const jobsToCancel = [`${username}_notify_day_before`, `${username}_activate_at_night`];
+
+  if (needDeleteAllTasks) {
+    jobsToCancel.push(`${username}_notify_day_of`);
+  }
 
   jobsToCancel.forEach((jobName) => {
     const job = schedule.scheduledJobs[jobName];
@@ -1451,6 +1455,25 @@ bot.callbackQuery(/.*/, async (ctx) => {
     }
 
     await ctx.reply(`Вы выбрали дату активации разработчика:\n ${formatDate(dateText)}`);
+    // Извлекаем текст сообщения из callback-запроса
+    const text = ctx.callbackQuery.message.text;
+    const match = text.match(/@(\w+)/);
+
+    let developerName = null;
+    if (match && match[0]) {
+      developerName = match[0];
+    }
+    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
+    // Извлекаем данные о пользователе из контекста callback-запроса
+    const userId = ctx.callbackQuery.from.id;
+    const username = ctx.callbackQuery.from.username;
+    const fullMessage = `Разработчик ${developerName} временно исключен\nИнициатор: ${username ? '@' + username : `ID: ${userId}`} ${isDevelopmentMode ? 'Чат: разработчика' : ''}`;
+
+    // Отправляем сообщение в сервисный чат
+    await sendMessageToChat(targetChatId, fullMessage, {
+      disable_web_page_preview: true,
+    });
+
     calendarData.isOpen = false;
     // Здесь вызываем функцию для сохранения даты включения и автоматического включения разработчика
     await excludeUserWithDate(ctx, calendarData.userName, dateText);
