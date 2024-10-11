@@ -375,7 +375,7 @@ const saveMrCounter = async () => {
   }
 };
 
-const resetMrCounterIfNeeded = async () => {
+const resetMrCounterIfNeeded = async (ctx = undefined) => {
   const currentDate = moment().tz('Europe/Moscow').format('YYYY-MM-DD');
   const currentMonth = moment().tz('Europe/Moscow').format('YYYY-MM');
   const currentYear = moment().tz('Europe/Moscow').format('YYYY');
@@ -404,6 +404,7 @@ const resetMrCounterIfNeeded = async () => {
   if (mrCounter.daily.lastResetDate !== currentDate) {
     mrCounter.daily.count = 0;
     mrCounter.daily.lastResetDate = currentDate;
+    if (ctx) await sendUnmergedMergeRequestsInfo(ctx);
     await updateMergeRequestsStatus();
   }
 
@@ -426,7 +427,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   // Работает только для ID чата команды
   if (isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) return;
 
-  await resetMrCounterIfNeeded();
+  await resetMrCounterIfNeeded(ctx);
 
   // Увеличиваем счетчики
   mrCounter.daily.count += count;
@@ -655,9 +656,15 @@ const sendUnmergedMergeRequestsInfo = async (ctx) => {
     return;
   }
 
-  const messageParts = unmergedMRs.map(
-    (mr) => `${mr.url}\n- ${mr.approvalsLeft === 0 ? `МР ожидает влития` : `осталось аппрувов: ${mr.approvalsLeft}`} `,
-  );
+  const messageParts = unmergedMRs.map((mr) => {
+    const approversInfo =
+      mr.approvers?.length && mr.approvalsLeft > 0
+        ? `\nАпруверы: ${mr.approvers[0] || ''} ${mr.approvers[1] || ''}`
+        : '';
+
+    return `${mr.url}\n- ${mr.approvalsLeft === 0 ? 'МР ожидает влития' : `осталось аппрувов: ${mr.approvalsLeft}`}${approversInfo}\n`;
+  });
+
   const message = `Невлитые Merge Requests:\n\n${messageParts.join('\n')}`;
 
   await ctx.reply(message);
@@ -908,7 +915,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         if (!isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
           // Назначаем ревьюверов в гитлабе
           // await assignGitLabReviewers(projectId, mrId, [selectedLeadId, selectedCheckMrId]);
-          mrsCount += 1;
+          // mrsCount += 1;
           mergeRequests.push({
             url: mrUrl,
             approvalsLeft: 2,
@@ -916,6 +923,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
             projectId,
             mrId,
             createdAt: mrStatusResponse.created_at || null,
+            approvers: [messengerNickLead, messengerNickSimpleReviewer],
           });
         }
 
