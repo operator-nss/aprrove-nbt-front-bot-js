@@ -404,7 +404,11 @@ const resetMrCounterIfNeeded = async (ctx = undefined) => {
   if (mrCounter.daily.lastResetDate !== currentDate) {
     mrCounter.daily.count = 0;
     mrCounter.daily.lastResetDate = currentDate;
-    if (ctx) await sendUnmergedMergeRequestsInfo(ctx);
+    if (ctx) {
+      setTimeout(async () => {
+        await sendUnmergedMergeRequestsInfo(ctx, false);
+      }, 10000);
+    }
     await updateMergeRequestsStatus();
   }
 
@@ -643,7 +647,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   );
 };
 
-const sendUnmergedMergeRequestsInfo = async (ctx) => {
+const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true) => {
   await updateMergeRequestsStatus(); // Обновляем информацию о статусах
 
   // Фильтруем невлитые МР, созданные до начала текущего дня
@@ -652,6 +656,9 @@ const sendUnmergedMergeRequestsInfo = async (ctx) => {
   });
 
   if (unmergedMRs.length === 0) {
+    if (!isNeedWriteEmptyMessage) {
+      return;
+    }
     await ctx.reply('Все Мрчики влиты😍');
     return;
   }
