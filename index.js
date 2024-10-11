@@ -1131,11 +1131,7 @@ const includeUser = async (ctx, username) => {
 
 const removeScheduledJobs = async (username) => {
   // Удаляем все задачи для этого пользователя
-  const jobsToCancel = [
-    `${username}__notify_day_before`,
-    `${username}__notify_day_of`,
-    `${username}__activate_at_night`,
-  ];
+  const jobsToCancel = [`${username}_notify_day_before`, `${username}_notify_day_of`, `${username}_activate_at_night`];
 
   jobsToCancel.forEach((jobName) => {
     const job = schedule.scheduledJobs[jobName];
