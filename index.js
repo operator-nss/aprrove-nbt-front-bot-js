@@ -196,19 +196,17 @@ const loadScheduledJobs = async () => {
       const [username, taskType] = name.split('__');
       const date = new Date(nextInvocation);
 
-      if (taskType === 'notify') {
-        if (name.includes('day_before')) {
-          scheduleJob({
-            username,
-            includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
-          });
-        } else if (name.includes('day_of')) {
-          scheduleJob({
-            username,
-            includeDate: moment(date).format('YYYY-MM-DD'),
-          });
-        }
-      } else if (taskType === 'activate') {
+      if (taskType === 'notify_day_before') {
+        scheduleJob({
+          username,
+          includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
+        });
+      } else if (taskType === 'notify_ay_of') {
+        scheduleJob({
+          username,
+          includeDate: moment(date).format('YYYY-MM-DD'),
+        });
+      } else if (taskType === 'activate_at_night') {
         scheduleJob({
           username,
           includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
@@ -228,7 +226,7 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 
   // Преобразуем дату в ISO формат
   const currentMoment = moment(currentData, 'YYYY-MM-DD'); // Преобразуем в формат 'YYYY-MM-DD'
-
+  console.log('action', action);
   let newDate;
   if (action === 'prev') {
     newDate = currentMoment.subtract(1, 'month').toDate(); // Предыдущий месяц
@@ -921,7 +919,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         // Если чат команды
         if (!isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
           // Назначаем ревьюверов в гитлабе
-          // await assignGitLabReviewers(projectId, mrId, [selectedLeadId, selectedCheckMrId]);
+          await assignGitLabReviewers(projectId, mrId, [selectedLeadId, selectedCheckMrId]);
           // mrsCount += 1;
           mergeRequests.push({
             url: mrUrl,
@@ -1235,7 +1233,7 @@ bot.on(':voice', async (ctx) => {
 // Обработка сообщений с MR
 bot.on('::url').filter(checkMr, async (ctx) => {
   const { text, entities } = ctx.message;
-
+  console.log(ctx);
   // Массив для хранения всех ссылок
   let urls = '';
 
@@ -1260,7 +1258,7 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 // Обработка добавления пользователя
 bot.on('msg:text', async (ctx) => {
   const session = getSession(ctx.chat.id);
-
+  console.log(ctx);
   if (session.awaitingSuggestionsInput) {
     const suggestion = ctx.message.text;
 
@@ -1314,7 +1312,7 @@ bot.on('msg:text', async (ctx) => {
 bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) => {
   try {
     const [action, username] = ctx.callbackQuery.data.split(':');
-
+    console.log(action);
     const userIndex = userList.findIndex((user) => user.messengerNick === username);
 
     if (userIndex !== -1) {
@@ -1368,6 +1366,7 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
 bot.callbackQuery(/.*/, async (ctx) => {
   const action = ctx.callbackQuery.data;
   const session = getSession(ctx.chat.id);
+  console.log('action1369', action);
   // Если не админ
   if (!(await isAdmin(ctx))) {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
@@ -1379,44 +1378,41 @@ bot.callbackQuery(/.*/, async (ctx) => {
     session.awaitingSuggestionsInput = false;
   }
 
-  if (calendarData.isOpen && action.startsWith('calendar-telegram-date-')) {
-    const dateText = action.split('-').slice(3).join('-'); // Извлекаем дату из данных
-    const selectedDate = moment(dateText, 'YYYY-MM-DD'); // Преобразуем в формат 'YYYY-MM-DD'
-    const minAllowedDate = moment().add(1, 'day').startOf('day'); // Завтрашний день без времени
+  if (calendarData.isOpen) {
+    if (action.startsWith('calendar-telegram-date-')) {
+      const dateText = action.split('-').slice(3).join('-'); // Извлекаем дату из данных
 
-    // Проверяем, что выбранная дата не раньше завтрашнего дня
-    if (selectedDate.isBefore(minAllowedDate)) {
+      await ctx.reply(`Вы выбрали дату активации разработчика:\n${formatDate(dateText)}`);
+      // Извлекаем текст сообщения из callback-запроса
+      const text = ctx.callbackQuery.message.text;
+      const match = text.match(/@(\w+)/);
+
+      let developerName = null;
+      if (match && match[0]) {
+        developerName = match[0];
+      }
+      const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
+      // Извлекаем данные о пользователе из контекста callback-запроса
+      const userId = ctx.callbackQuery.from.id;
+      const username = ctx.callbackQuery.from.username;
+      const fullMessage = `Разработчик ${developerName} временно исключен\nИнициатор: ${username ? '@' + username : `ID: ${userId}`} ${isDevelopmentMode ? 'Чат: разработчика' : ''}`;
+
+      // Отправляем сообщение в сервисный чат
+      await sendMessageToChat(targetChatId, fullMessage, {
+        disable_web_page_preview: true,
+      });
+
+      calendarData.isOpen = false;
+      // Здесь вызываем функцию для сохранения даты включения и автоматического включения разработчика
+      await excludeUserWithDate(ctx, calendarData.userName, dateText);
+      // Обязательно подтверждаем callback-запрос
+      await ctx.answerCallbackQuery();
+      await listUsers(ctx);
+      return;
+    } else if (action.startsWith('calendar-telegram-ignore-')) {
       await ctx.answerCallbackQuery({ text: 'Выберите дату в будущем.', show_alert: true });
       return; // Останавливаем выполнение, если выбрана дата в прошлом
     }
-
-    await ctx.reply(`Вы выбрали дату активации разработчика:\n ${formatDate(dateText)}`);
-    // Извлекаем текст сообщения из callback-запроса
-    const text = ctx.callbackQuery.message.text;
-    const match = text.match(/@(\w+)/);
-
-    let developerName = null;
-    if (match && match[0]) {
-      developerName = match[0];
-    }
-    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
-    // Извлекаем данные о пользователе из контекста callback-запроса
-    const userId = ctx.callbackQuery.from.id;
-    const username = ctx.callbackQuery.from.username;
-    const fullMessage = `Разработчик ${developerName} временно исключен\nИнициатор: ${username ? '@' + username : `ID: ${userId}`} ${isDevelopmentMode ? 'Чат: разработчика' : ''}`;
-
-    // Отправляем сообщение в сервисный чат
-    await sendMessageToChat(targetChatId, fullMessage, {
-      disable_web_page_preview: true,
-    });
-
-    calendarData.isOpen = false;
-    // Здесь вызываем функцию для сохранения даты включения и автоматического включения разработчика
-    await excludeUserWithDate(ctx, calendarData.userName, dateText);
-    // Обязательно подтверждаем callback-запрос
-    await ctx.answerCallbackQuery();
-    await listUsers(ctx);
-    return;
   } else {
     calendarData.isOpen = false;
   }
