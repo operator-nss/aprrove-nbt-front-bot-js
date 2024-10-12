@@ -93,7 +93,7 @@ await bot.api.setMyCommands(
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
   try {
     // Определяем целевой чат в зависимости от режима разработки
-    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
+    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
     if (!userId && !username)
       return await sendMessageToChat(targetChatId, `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : ''}`);
 
@@ -226,7 +226,7 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 
   // Преобразуем дату в ISO формат
   const currentMoment = moment(currentData, 'YYYY-MM-DD'); // Преобразуем в формат 'YYYY-MM-DD'
-  console.log('action', action);
+
   let newDate;
   if (action === 'prev') {
     newDate = currentMoment.subtract(1, 'month').toDate(); // Предыдущий месяц
@@ -920,7 +920,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         if (!isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
           // Назначаем ревьюверов в гитлабе
           await assignGitLabReviewers(projectId, mrId, [selectedLeadId, selectedCheckMrId]);
-          // mrsCount += 1;
+          mrsCount += 1;
           mergeRequests.push({
             url: mrUrl,
             approvalsLeft: 2,
@@ -1233,7 +1233,6 @@ bot.on(':voice', async (ctx) => {
 // Обработка сообщений с MR
 bot.on('::url').filter(checkMr, async (ctx) => {
   const { text, entities } = ctx.message;
-  console.log(ctx);
   // Массив для хранения всех ссылок
   let urls = '';
 
@@ -1258,7 +1257,6 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 // Обработка добавления пользователя
 bot.on('msg:text', async (ctx) => {
   const session = getSession(ctx.chat.id);
-  console.log(ctx);
   if (session.awaitingSuggestionsInput) {
     const suggestion = ctx.message.text;
 
@@ -1312,7 +1310,7 @@ bot.on('msg:text', async (ctx) => {
 bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) => {
   try {
     const [action, username] = ctx.callbackQuery.data.split(':');
-    console.log(action);
+
     const userIndex = userList.findIndex((user) => user.messengerNick === username);
 
     if (userIndex !== -1) {
@@ -1366,7 +1364,7 @@ bot.callbackQuery(/(remove_user|exclude_user|include_user):(.+)/, async (ctx) =>
 bot.callbackQuery(/.*/, async (ctx) => {
   const action = ctx.callbackQuery.data;
   const session = getSession(ctx.chat.id);
-  console.log('action1369', action);
+
   // Если не админ
   if (!(await isAdmin(ctx))) {
     await ctx.answerCallbackQuery({ text: 'У вас нет прав для управления этим ботом.', show_alert: true });
