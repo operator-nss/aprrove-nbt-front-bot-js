@@ -18,6 +18,7 @@ import { calendarOptions, fileChangeMessages, manyMrPhrases, motivationalMessage
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
+import jiraInstance from './jiraInstance.js';
 
 dotenv.config();
 
@@ -1065,10 +1066,10 @@ const includeUser = async (ctx, username) => {
 
 const removeScheduledJobs = async (username, needDeleteAllTasks = false) => {
   // Удаляем все задачи для этого пользователя
-  const jobsToCancel = [`${username}_notify_day_before`, `${username}_activate_at_night`];
+  const jobsToCancel = [`${username}__notify_day_before`, `${username}__activate_at_night`];
 
   if (needDeleteAllTasks) {
-    jobsToCancel.push(`${username}_notify_day_of`);
+    jobsToCancel.push(`${username}__notify_day_of`);
   }
 
   jobsToCancel.forEach((jobName) => {
@@ -1494,5 +1495,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
 bot.start({
   onStart: async () => {
     // await sendMessageToChat(TG_TEAM_CHAT_ID, `А что так можно было?)`);
+    // const {data} = await jiraInstance.get('/rest/api/latest/issue/NBT-29866')
+    //  console.log('data', data)
   },
 });
