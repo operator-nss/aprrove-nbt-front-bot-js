@@ -94,7 +94,7 @@ await bot.api.setMyCommands(
 const sendServiceMessage = async (message, userId = null, username = null, ignoreLogging = false) => {
   try {
     // Определяем целевой чат в зависимости от режима разработки
-    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
+    const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
     if (!userId && !username)
       return await sendMessageToChat(targetChatId, `${message}\n${isDevelopmentMode ? 'Чат: разработчика' : ''}`);
 
@@ -246,8 +246,8 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 
 const scheduleJob = async (job) => {
   const { username, includeDate } = job;
-  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
-  const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
+  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
+  const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
 
   // Уникальные имена задач для каждого события
   const notifyDayBefore = `${username}__notify_day_before`;
@@ -1390,7 +1390,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
       if (match && match[0]) {
         developerName = match[0];
       }
-      const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : DEV_CHAT_ID;
+      const targetChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
       // Извлекаем данные о пользователе из контекста callback-запроса
       const userId = ctx.callbackQuery.from.id;
       const username = ctx.callbackQuery.from.username;
