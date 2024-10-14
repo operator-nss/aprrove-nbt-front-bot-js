@@ -702,13 +702,13 @@ const updateMergeRequestsStatus = async () => {
   }
 };
 
-const assignGitLabReviewers = async (projectId, mergeRequestIid, reviewers) => {
+const assignGitLabReviewers = async (projectId, mergeRequestIid, mrUrl, reviewers) => {
   try {
     await axiosInstance.put(`https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}`, {
       reviewer_ids: reviewers,
     });
   } catch (error) {
-    await sendServiceMessage('Ошибка при назначении ревьюверов в Гитлаб.');
+    await sendServiceMessage(`Ошибка при редактировании МРа(бот не смог в гитлабе назначить ревьюверов).\MR:${mrUrl}`);
   }
 };
 
@@ -920,7 +920,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         // Если чат команды
         if (!isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
           // Назначаем ревьюверов в гитлабе
-          await assignGitLabReviewers(projectId, mrId, [selectedLeadId, selectedCheckMrId]);
+          await assignGitLabReviewers(projectId, mrId, mrUrl, [selectedLeadId, selectedCheckMrId]);
           mrsCount += 1;
           mergeRequests.push({
             url: mrUrl,
