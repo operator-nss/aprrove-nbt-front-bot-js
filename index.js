@@ -18,7 +18,6 @@ import { calendarOptions, fileChangeMessages, manyMrPhrases, motivationalMessage
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
-import jiraInstance from './jiraInstance.js';
 
 dotenv.config();
 
@@ -64,7 +63,7 @@ let loggingEnabled = true;
 let mrCounter;
 
 // Список мров
-let mergeRequests;
+let mergeRequests = [];
 
 // Переменная для хранения состояния режима разработки
 let isDevelopmentMode = false;
@@ -432,6 +431,13 @@ const incrementMrCounter = async (ctx, count = 1) => {
 
   await resetMrCounterIfNeeded(ctx);
 
+  // Сохранение предыдущего значения счетчика
+  const previousCount = mrCounter.daily.count;
+
+  // Проверка, прошли ли через кратное 10
+  const previousMultiple = Math.floor(previousCount / mrMotivationMessageCount);
+  const currentMultiple = Math.floor(mrCounter.daily.count / mrMotivationMessageCount);
+
   // Увеличиваем счетчики
   mrCounter.daily.count += count;
   mrCounter.monthly.count += count;
@@ -440,11 +446,7 @@ const incrementMrCounter = async (ctx, count = 1) => {
   await saveMrCounter();
 
   // Отправляем мотивационное сообщение при достижении порога
-  if (
-    mrCounter?.daily?.count !== undefined &&
-    mrCounter?.daily?.count !== null &&
-    mrCounter?.daily?.count % mrMotivationMessageCount === 0
-  ) {
+  if (mrCounter?.daily?.count !== undefined && mrCounter?.daily?.count !== null && currentMultiple > previousMultiple) {
     setTimeout(async () => {
       await sendMotivationalMessage(ctx);
     }, 30000);
@@ -532,9 +534,9 @@ const initializeBot = async () => {
   await loadExcludedUsers(); // Загружаем исключенных пользователей
   await loadSuggestions(); // Загружаем предложения
   await loadMrCounter(); // Загружаем счетчик МР
+  await loadMergeRequests(); // Загружаем Merge Requests
   await resetMrCounterIfNeeded(); // Сбрасываем счетчики, если нужно
   await loadScheduledJobs(); // Загружаем задачи планировщика
-  await loadMergeRequests(); // Загружаем Merge Requests
   // scheduleUnmergedMergeRequestsNotification(); // Запланируем уведомления о невлитых МР
 };
 
@@ -661,17 +663,20 @@ const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true
     await ctx.reply('Все Мрчики влиты😍');
     return;
   }
-
   const messageParts = unmergedMRs.map((mr) => {
-    const approversInfo =
+    let approversInfo =
       mr.approvers?.length && mr.approvalsLeft > 0
         ? `\nАпруверы: ${mr.approvers[0] || ''} ${mr.approvers[1] || ''}`
         : '';
 
+    if (mr.approved && mr.approvers?.length && mr.approvalsLeft > 0) {
+      approversInfo = `\nАпруверы: ${mr.approvers.filter((user) => user !== mr.approved)}❌  ${mr.approvers.filter((user) => user === mr.approved)}✅`;
+    }
+
     return `${mr.url}\n- ${mr.approvalsLeft === 0 ? 'МР ожидает влития' : `осталось аппрувов: ${mr.approvalsLeft}`}${approversInfo}\n`;
   });
 
-  const message = `Невлитые Merge Requests:\n\n${messageParts.join('\n')}`;
+  const message = `Не влитые Merge Requests:\n\n${messageParts.join('\n')}`;
 
   await ctx.reply(message);
 };
@@ -688,6 +693,15 @@ const updateMergeRequestsStatus = async () => {
           if (mr.state === 'merged' || mr.state === 'closed') {
             mr.remove = true; // Помечаем для удаления
           }
+          const approved = mrStatusResponse.approved_by;
+          if (Array.isArray(approved) && approved.length) {
+            const aprover = userList.find((user) => user.gitlabName === approved[0]?.user?.username)?.messengerNick;
+            if (aprover) {
+              mr.approved = aprover;
+            }
+          } else {
+            mr.approved = null;
+          }
         }
       } catch (err) {
         await sendServiceMessage(`Ошибка обновления статуса для МР: ${mr.url}:`);
@@ -698,6 +712,7 @@ const updateMergeRequestsStatus = async () => {
     mergeRequests = mergeRequests.filter((mr) => !mr.remove);
     await saveMergeRequests(mergeRequests);
   } catch (error) {
+    console.log(error);
     await sendServiceMessage('Ошибка при обновлении статусов МР.');
   }
 };
@@ -901,7 +916,6 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
               activeUsers.find((activeUser) => activeUser.gitlabName === user.username).messengerNick !==
               selectedLeadNick,
           );
-
           if (remainingApprovers.length > 0) {
             const selectedCheckMr = remainingApprovers[Math.floor(Math.random() * remainingApprovers.length)];
             selectedCheckMrId = selectedCheckMr.id;
@@ -911,9 +925,15 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           }
         }
         const messengerNickLead = activeUsers.find((lead) => lead.gitlabName === selectedLeadNick).messengerNick;
-        const messengerNickSimpleReviewer = activeUsers.find(
-          (lead) => lead.gitlabName === selectedCheckMrNick,
-        ).messengerNick;
+
+        const simpleReviewer = activeUsers.find((lead) => lead.gitlabName === selectedCheckMrNick);
+
+        if (!simpleReviewer) {
+          error += `МР: ${mrUrl}.\nОшибка: отсутствуют доступные ревьюверы`;
+          continue;
+        }
+
+        const messengerNickSimpleReviewer = simpleReviewer.messengerNick;
 
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
 
@@ -921,7 +941,17 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         if (!isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
           // Назначаем ревьюверов в гитлабе
           await assignGitLabReviewers(projectId, mrId, mrUrl, [selectedLeadId, selectedCheckMrId]);
+
+          // Смотрим есть ли этот МР в текущем массиве
+          const findMergeRequests = mergeRequests.find((mr) => mrId === mr.mrId);
+          // Если есть - не добавляем его в массив
+          if (findMergeRequests) {
+            success = true;
+            continue;
+          }
+
           mrsCount += 1;
+
           mergeRequests.push({
             url: mrUrl,
             approvalsLeft: 2,
@@ -1237,7 +1267,7 @@ bot.on('::url').filter(checkMr, async (ctx) => {
   // Массив для хранения всех ссылок
   let urls = '';
 
-  // Проходим по всем entities и ищем ссылки(могут быть скрыты за richText)
+  // Проходим по всем entities
   entities.forEach((entity) => {
     if (entity.type === 'url') {
       // Извлекаем ссылку из текста, используя offset и length
@@ -1257,6 +1287,26 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 
 // Обработка добавления пользователя
 bot.on('msg:text', async (ctx) => {
+  // Если скрытая форматированием ссылка
+  let urls = [];
+  const { text, entities } = ctx.message;
+  // Проходим по всем entities
+  entities.forEach((entity) => {
+    if (entity.type === 'url') {
+      // Извлекаем ссылку из текста, используя offset и length
+      const url = text.substring(entity.offset, entity.offset + entity.length);
+      urls += ' ' + url;
+    } else if (entity.type === 'text_link' && entity.url.includes('merge_requests')) {
+      // Если это текстовая ссылка, берем её напрямую из entity
+      urls += ' ' + entity.url;
+    }
+  });
+
+  // Автор сообщения
+  const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+  // Назначаем ревьюверов на основе найденного MR
+  await assignReviewers(ctx, urls, username);
+
   const session = getSession(ctx.chat.id);
   if (session.awaitingSuggestionsInput) {
     const suggestion = ctx.message.text;
