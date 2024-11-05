@@ -669,7 +669,12 @@ const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true
         ? `\nАпруверы: ${mr.approvers[0] || ''} ${mr.approvers[1] || ''}`
         : '';
 
-    if (mr.approved && mr.approvers?.length && mr.approvalsLeft > 0) {
+    if (
+      mr.approved &&
+      mr.approvers.some((user) => user === mr.approved) &&
+      mr.approvers?.length &&
+      mr.approvalsLeft > 0
+    ) {
       approversInfo = `\nАпруверы: ${mr.approvers.filter((user) => user !== mr.approved)}❌  ${mr.approvers.filter((user) => user === mr.approved)}✅`;
     }
 
@@ -1025,7 +1030,7 @@ const assignReviewers = async (ctx, message, authorNick) => {
     await sendServiceMessage(`${message}.\n\nПочему-то только один ревьювер доступен. Просьба проверить😊`);
     return;
   }
-
+  if (typeof message === 'object') return;
   // Проверяем что в сообщении именно МР а не левая ссылка
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
   if (!mrLinks || !mrLinks.length) {
@@ -1291,16 +1296,17 @@ bot.on('msg:text', async (ctx) => {
   let urls = [];
   const { text, entities } = ctx.message;
   // Проходим по всем entities
-  entities.forEach((entity) => {
-    if (entity.type === 'url') {
-      // Извлекаем ссылку из текста, используя offset и length
-      const url = text.substring(entity.offset, entity.offset + entity.length);
-      urls += ' ' + url;
-    } else if (entity.type === 'text_link' && entity.url.includes('merge_requests')) {
-      // Если это текстовая ссылка, берем её напрямую из entity
-      urls += ' ' + entity.url;
-    }
-  });
+  Array.isArray(entities) &&
+    entities.forEach((entity) => {
+      if (entity.type === 'url') {
+        // Извлекаем ссылку из текста, используя offset и length
+        const url = text.substring(entity.offset, entity.offset + entity.length);
+        urls += ' ' + url;
+      } else if (entity.type === 'text_link' && entity.url.includes('merge_requests')) {
+        // Если это текстовая ссылка, берем её напрямую из entity
+        urls += ' ' + entity.url;
+      }
+    });
 
   // Автор сообщения
   const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
