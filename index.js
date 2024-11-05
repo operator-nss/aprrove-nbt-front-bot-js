@@ -245,8 +245,10 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 
 const scheduleJob = async (job) => {
   const { username, includeDate } = job;
-  const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
-  const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
+  // const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
+  const targetTeamChatId = TG_TEAM_CHAT_ID;
+  // const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
+  const targetServiceChatId = SERVICE_CHAT_ID;
 
   // Уникальные имена задач для каждого события
   const notifyDayBefore = `${username}__notify_day_before`;
