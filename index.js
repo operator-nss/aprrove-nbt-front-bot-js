@@ -666,6 +666,9 @@ const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true
     return;
   }
   const messageParts = unmergedMRs.map((mr) => {
+    const testFailed = mr.testStatus === 'failed';
+    const testStatusMessage = testFailed ? '\n⚠️ Тесты не прошли' : '';
+
     let approversInfo =
       mr.approvers?.length && mr.approvalsLeft > 0
         ? `\nАпруверы: ${mr.approvers[0] || ''} ${mr.approvers[1] || ''}`
@@ -680,7 +683,7 @@ const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true
       approversInfo = `\nАпруверы: ${mr.approvers.filter((user) => user !== mr.approved)}❌  ${mr.approvers.filter((user) => user === mr.approved)}✅`;
     }
 
-    return `${mr.url}\n- ${mr.approvalsLeft === 0 ? 'МР ожидает влития' : `осталось аппрувов: ${mr.approvalsLeft}`}${approversInfo}\n`;
+    return `${mr.url}${testStatusMessage}\n- ${mr.approvalsLeft === 0 ? 'МР ожидает влития' : `осталось аппрувов: ${mr.approvalsLeft}`}${approversInfo}\n`;
   });
 
   const message = `Не влитые Merge Requests:\n\n${messageParts.join('\n')}`;
@@ -692,6 +695,18 @@ const updateMergeRequestsStatus = async () => {
   try {
     for (const mr of mergeRequests) {
       try {
+        if (mr.pipelineId) {
+          const checkPipelineUrl = `https://${GITLAB_URL}/api/v4//projects/${mr.projectId}/pipelines/${mr.pipelineId}/jobs`;
+          const { data: jobs } = await axiosInstance.get(checkPipelineUrl);
+          // Ищем таску с именем "NPM Run Test"
+          const testJob = jobs.find((job) => job.name === 'NPM Run Test');
+          if (testJob.status === 'failed') {
+            mr.testStatus = 'failed';
+          } else if (testJob.status === 'success') {
+            mr.testStatus = 'success';
+          }
+        }
+
         const mrStatusUrl = `https://${GITLAB_URL}/api/v4/projects/${mr.projectId}/merge_requests/${mr.mrId}/approvals`;
         const { data: mrStatusResponse, status: mrStatusStatus } = await axiosInstance.get(mrStatusUrl);
         if (mrStatusStatus === 200) {
@@ -783,6 +798,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
         const mergeRequestLabels = mrStatusResponse?.labels;
+        const mergeRequestPipelineId = mrStatusResponse?.pipeline?.id;
         const mergeRequestConflicts = mrStatusResponse?.has_conflicts ?? false;
 
         const mergeRequestChangesCount = !!mrStatusResponse?.changes_count
@@ -819,11 +835,11 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           allAnswers += `\n${message}`;
         }
 
-        if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
-          allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Ревьюверы не назначаются на MRы в статусе 'Draft'🚨\n`;
-          success = true;
-          continue;
-        }
+        // if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
+        //   allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Ревьюверы не назначаются на MRы в статусе 'Draft'🚨\n`;
+        //   success = true;
+        //   continue;
+        // }
 
         if (mergeRequestState?.toLowerCase() === 'merged' && !isDevelopmentMode) {
           allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
@@ -967,6 +983,7 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
             mrId,
             createdAt: mrStatusResponse.created_at || null,
             approvers: [messengerNickLead, messengerNickSimpleReviewer],
+            pipelineId: mergeRequestPipelineId,
           });
         }
 
