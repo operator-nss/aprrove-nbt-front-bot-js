@@ -835,11 +835,11 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           allAnswers += `\n${message}`;
         }
 
-        // if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
-        //   allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Ревьюверы не назначаются на MRы в статусе 'Draft'🚨\n`;
-        //   success = true;
-        //   continue;
-        // }
+        if (mergeRequestTitle?.toLowerCase()?.startsWith('draft:')) {
+          allAnswers += `\n${mrUrl}\nМР в драфте! Перепроверь, пожалуйста😉\n🚨Ревьюверы не назначаются на MRы в статусе 'Draft'🚨\n`;
+          success = true;
+          continue;
+        }
 
         if (mergeRequestState?.toLowerCase() === 'merged' && !isDevelopmentMode) {
           allAnswers += `\n${mrUrl}\nЭтот МР уже влит) Может ссылка не та?🤔\n`;
