@@ -306,7 +306,8 @@ const showScheduledJobs = async (ctx) => {
   jobs.forEach((job) => {
     const jobName = job.name;
     const nextInvocation = job.nextInvocation(); // Получаем следующую дату выполнения
-    const [username, taskType] = jobName.split('__');
+
+    const [username, taskType, currentDate] = jobName.split('__');
 
     if (!nextInvocation) return; // Пропускаем задачи без запланированного времени выполнения
 
@@ -323,6 +324,9 @@ const showScheduledJobs = async (ctx) => {
         } else if (jobName.includes('day_of')) {
           message += `- Уведомление команды ${formatDateTime(nextInvocationDate)} о том, что активирован ревьювер с ником ${username}.\n`;
         }
+        break;
+      case 'evening_mr_notification':
+        message += `⚠Уведомление в группе команды о невлитых Мрах в 18ч ${currentDate}`;
         break;
       default:
         break;
@@ -405,9 +409,20 @@ const resetMrCounterIfNeeded = async (ctx = undefined) => {
     mrCounter.daily.count = 0;
     mrCounter.daily.lastResetDate = currentDate;
     if (ctx) {
-      setTimeout(async () => {
-        await sendUnmergedMergeRequestsInfo(ctx, false);
-      }, 10000);
+      // setTimeout(async () => {
+      //   await sendUnmergedMergeRequestsInfo(ctx, false);
+      // }, 10000);
+
+      // Запланировать задачу на 18:00 для отправки уведомления о невлитых МР
+      const date = moment().tz('Europe/Moscow').format('DD-MM-YYYY');
+      const jobName = `unmerged__evening_mr_notification__${date}`;
+      const targetChatId = DEV_CHAT_ID;
+      // Проверяем, есть ли уже запланированная задача
+      if (!schedule.scheduledJobs[jobName]) {
+        schedule.scheduleJob(jobName, moment.tz(timeZone).set({ hour: 0, minute: 31 }).toDate(), async () => {
+          await sendUnmergedMergeRequestsInfo(targetChatId, false, true);
+        });
+      }
     }
     await updateMergeRequestsStatus();
   }
@@ -537,7 +552,7 @@ const initializeBot = async () => {
   await loadSuggestions(); // Загружаем предложения
   await loadMrCounter(); // Загружаем счетчик МР
   await loadMergeRequests(); // Загружаем Merge Requests
-  await resetMrCounterIfNeeded(); // Сбрасываем счетчики, если нужно
+  await resetMrCounterIfNeeded('need'); // Сбрасываем счетчики, если нужно
   await loadScheduledJobs(); // Загружаем задачи планировщика
   // scheduleUnmergedMergeRequestsNotification(); // Запланируем уведомления о невлитых МР
 };
@@ -650,7 +665,7 @@ const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
   );
 };
 
-const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true) => {
+const sendUnmergedMergeRequestsInfo = async (target, isNeedWriteEmptyMessage = true, eveningMessage = false) => {
   await updateMergeRequestsStatus(); // Обновляем информацию о статусах
 
   // Фильтруем невлитые МР, созданные до начала текущего дня
@@ -686,9 +701,16 @@ const sendUnmergedMergeRequestsInfo = async (ctx, isNeedWriteEmptyMessage = true
     return `${mr.url}${testStatusMessage}\n- ${mr.approvalsLeft === 0 ? 'МР ожидает влития' : `осталось аппрувов: ${mr.approvalsLeft}`}${approversInfo}\n`;
   });
 
-  const message = `Не влитые Merge Requests:\n\n${messageParts.join('\n')}`;
-
-  await ctx.reply(message);
+  const startMessage = eveningMessage
+    ? 'Коллеги, уже вечер, а у нас есть не влитые МРчики:'
+    : 'Не влитые Merge Requests:';
+  const message = `${startMessage}\n\n${messageParts.join('\n')}`;
+  // Проверяем, передан ли `ctx` или `chatId`
+  if (typeof target === 'object' && target.chat) {
+    await target.reply(message);
+  } else {
+    await bot.api.sendMessage(target, message);
+  }
 };
 
 const updateMergeRequestsStatus = async () => {
@@ -699,10 +721,10 @@ const updateMergeRequestsStatus = async () => {
           const checkPipelineUrl = `https://${GITLAB_URL}/api/v4//projects/${mr.projectId}/pipelines/${mr.pipelineId}/jobs`;
           const { data: jobs } = await axiosInstance.get(checkPipelineUrl);
           // Ищем таску с именем "NPM Run Test"
-          const testJob = jobs.find((job) => job.name === 'NPM Run Test');
-          if (testJob.status === 'failed') {
+          const testJob = jobs.find((job) => job.name.toLowerCase().includes('test'));
+          if (testJob?.status === 'failed') {
             mr.testStatus = 'failed';
-          } else if (testJob.status === 'success') {
+          } else if (testJob?.status === 'success') {
             mr.testStatus = 'success';
           }
         }
@@ -1568,7 +1590,7 @@ bot.callbackQuery(/.*/, async (ctx) => {
 
 // Запуск бота
 bot.start({
-  onStart: async () => {
+  onStart: async (ctx) => {
     // await sendMessageToChat(TG_TEAM_CHAT_ID, `А что так можно было?)`);
     // const {data} = await jiraInstance.get('/rest/api/latest/issue/NBT-29866')
     //  console.log('data', data)
