@@ -193,7 +193,7 @@ const loadScheduledJobs = async () => {
     const jobData = JSON.parse(fs.readFileSync(path.resolve('bd/scheduledJobs.json')));
 
     jobData.forEach(({ name, nextInvocation }) => {
-      const [username, taskType] = name.split('__');
+      const [username, taskType, datePart] = name.split('__');
       const date = new Date(nextInvocation);
 
       if (taskType === 'notify_day_before') {
@@ -211,8 +211,16 @@ const loadScheduledJobs = async () => {
           username,
           includeDate: moment(date).add(1, 'days').format('YYYY-MM-DD'),
         });
+      } else if (taskType === 'evening_mr_notification') {
+        const notificationDate = moment(datePart, 'DD-MM-YYYY').tz(timeZone);
+        scheduleJob({
+          name,
+          includeDate: notificationDate.set({ hour: 18, minute: 0 }).format('YYYY-MM-DD HH:mm'),
+        });
       }
     });
+
+    await saveScheduledJobs();
   } catch (err) {
     await sendServiceMessage('Ошибка при загрузке задач из файла');
   }
@@ -244,7 +252,7 @@ bot.callbackQuery(/calendar-telegram-(prev|next)-.+/, async (ctx) => {
 });
 
 const scheduleJob = async (job) => {
-  const { username, includeDate } = job;
+  const { username, includeDate, name } = job;
   // const targetTeamChatId = isDevelopmentMode ? DEV_CHAT_ID : TG_TEAM_CHAT_ID;
   const targetTeamChatId = TG_TEAM_CHAT_ID;
   // const targetServiceChatId = isDevelopmentMode ? DEV_CHAT_ID : SERVICE_CHAT_ID;
@@ -254,6 +262,20 @@ const scheduleJob = async (job) => {
   const notifyDayBefore = `${username}__notify_day_before`;
   const notifyDayOf = `${username}__notify_day_of`;
   const activateAtNight = `${username}__activate_at_night`;
+  // Если это задача типа `unmerged__evening_mr_notification`
+  if (name && name.startsWith('unmerged__evening_mr_notification')) {
+    // Проверяем, существует ли уже запланированная задача
+    if (!schedule.scheduledJobs[name]) {
+      const notificationDate = moment(includeDate, 'YYYY-MM-DD HH:mm').tz(timeZone).toDate();
+
+      // Планируем задачу
+      schedule.scheduleJob(name, notificationDate, async () => {
+        await sendUnmergedMergeRequestsInfo(targetTeamChatId, false, true);
+        await removeScheduledJobs(null, name);
+      });
+    }
+    return;
+  }
 
   // Запланировать уведомление за день до включения/Проверка существования задач перед их созданием
   if (!schedule.scheduledJobs[notifyDayBefore]) {
@@ -274,7 +296,7 @@ const scheduleJob = async (job) => {
       moment.tz(includeDate, timeZone).set({ hour: 10, minute: 15 }).toDate(),
       async () => {
         await sendMessageToChat(targetTeamChatId, `Всем привет! ${username} вышел на работу! Поприветствуем его!`);
-        await removeScheduledJobs(username, true);
+        await removeScheduledJobs(username, null, true);
       },
     );
   }
@@ -291,7 +313,6 @@ const scheduleJob = async (job) => {
       },
     );
   }
-  await saveScheduledJobs();
 };
 
 const showScheduledJobs = async (ctx) => {
@@ -326,7 +347,7 @@ const showScheduledJobs = async (ctx) => {
         }
         break;
       case 'evening_mr_notification':
-        message += `⚠Уведомление в группе команды о невлитых Мрах в 18ч ${currentDate}`;
+        message += `⚠Уведомление в группе команды о невлитых Мрах ${formatDateTime(nextInvocationDate)}`;
         break;
       default:
         break;
@@ -409,20 +430,17 @@ const resetMrCounterIfNeeded = async (ctx = undefined) => {
     mrCounter.daily.count = 0;
     mrCounter.daily.lastResetDate = currentDate;
     if (ctx) {
-      // setTimeout(async () => {
-      //   await sendUnmergedMergeRequestsInfo(ctx, false);
-      // }, 10000);
+      setTimeout(async () => {
+        await sendUnmergedMergeRequestsInfo(ctx, false);
+      }, 10000);
 
       // Запланировать задачу на 18:00 для отправки уведомления о невлитых МР
-      const date = moment().tz('Europe/Moscow').format('DD-MM-YYYY');
-      const jobName = `unmerged__evening_mr_notification__${date}`;
-      const targetChatId = DEV_CHAT_ID;
-      // Проверяем, есть ли уже запланированная задача
-      if (!schedule.scheduledJobs[jobName]) {
-        schedule.scheduleJob(jobName, moment.tz(timeZone).set({ hour: 0, minute: 31 }).toDate(), async () => {
-          await sendUnmergedMergeRequestsInfo(targetChatId, false, true);
-        });
-      }
+      const date = moment().tz('Europe/Moscow').set({ hour: 18, minute: 0 });
+      const jobName = `unmerged__evening_mr_notification__${date.format('DD-MM-YYYY')}`;
+      await scheduleJob({
+        name: jobName,
+        includeDate: date.format('YYYY-MM-DD HH:mm'),
+      });
     }
     await updateMergeRequestsStatus();
   }
@@ -552,7 +570,7 @@ const initializeBot = async () => {
   await loadSuggestions(); // Загружаем предложения
   await loadMrCounter(); // Загружаем счетчик МР
   await loadMergeRequests(); // Загружаем Merge Requests
-  await resetMrCounterIfNeeded('need'); // Сбрасываем счетчики, если нужно
+  await resetMrCounterIfNeeded(); // Сбрасываем счетчики, если нужно
   await loadScheduledJobs(); // Загружаем задачи планировщика
   // scheduleUnmergedMergeRequestsNotification(); // Запланируем уведомления о невлитых МР
 };
@@ -1136,18 +1154,30 @@ const includeUser = async (ctx, username) => {
     }
     await saveExcludedUsers();
     // Удаляем задачи для этого пользователя
-    await removeScheduledJobs(username, true);
+    await removeScheduledJobs(username, null, true);
   }
 };
 
-const removeScheduledJobs = async (username, needDeleteAllTasks = false) => {
+const removeScheduledJobs = async (username = null, taskNamePrefix = null, needDeleteAllTasks = false) => {
+  const jobsToCancel = [];
   // Удаляем все задачи для этого пользователя
-  const jobsToCancel = [`${username}__notify_day_before`, `${username}__activate_at_night`];
-
-  if (needDeleteAllTasks) {
-    jobsToCancel.push(`${username}__notify_day_of`);
+  if (username) {
+    jobsToCancel.push(`${username}__notify_day_before`, `${username}__activate_at_night`);
+    if (needDeleteAllTasks) {
+      jobsToCancel.push(`${username}__notify_day_of`);
+    }
   }
 
+  // Если указан `taskNamePrefix`, удаляем задачи по префиксу
+  if (taskNamePrefix) {
+    Object.keys(schedule.scheduledJobs).forEach((jobName) => {
+      if (jobName.startsWith(taskNamePrefix)) {
+        jobsToCancel.push(jobName);
+      }
+    });
+  }
+
+  // Удаляем задачи из планировщика
   jobsToCancel.forEach((jobName) => {
     const job = schedule.scheduledJobs[jobName];
     if (job) {
