@@ -322,9 +322,10 @@ const showScheduledJobs = async (ctx) => {
     return;
   }
 
-  let message = `Запланированные задачи(${jobs.length}):\n`;
+  const filteredJobs = jobs.filter((job) => !!job.nextInvocation());
+  let message = `Запланированные задачи(${filteredJobs.length}):\n`;
 
-  jobs.forEach((job) => {
+  filteredJobs.forEach((job) => {
     const jobName = job.name;
     const nextInvocation = job.nextInvocation(); // Получаем следующую дату выполнения
 
@@ -570,9 +571,7 @@ const initializeBot = async () => {
   await loadSuggestions(); // Загружаем предложения
   await loadMrCounter(); // Загружаем счетчик МР
   await loadMergeRequests(); // Загружаем Merge Requests
-  await resetMrCounterIfNeeded(); // Сбрасываем счетчики, если нужно
   await loadScheduledJobs(); // Загружаем задачи планировщика
-  // scheduleUnmergedMergeRequestsNotification(); // Запланируем уведомления о невлитых МР
 };
 
 // Запуск инициализации
@@ -785,7 +784,7 @@ const assignGitLabReviewers = async (projectId, mergeRequestIid, mrUrl, reviewer
       reviewer_ids: reviewers,
     });
   } catch (error) {
-    await sendServiceMessage(`Ошибка при редактировании МРа(бот не смог в гитлабе назначить ревьюверов).\MR:${mrUrl}`);
+    await sendServiceMessage(`Ошибка при редактировании МРа(бот не смог в гитлабе назначить ревьюверов).\nMR:${mrUrl}`);
   }
 };
 
@@ -1246,7 +1245,11 @@ const helpCommand = async (ctx) => {
     '<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n' +
     '<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Ревьюверы выбираются только из списка активных сотрудников\n\n' +
     '<b><i>Проверить чаты</i></b> - Проверка чатов на доступность(как-то раз слетел ID одного чата)\n\n' +
-    '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования).';
+    '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования)\n\n' +
+    '<b><i>/chatid</i></b> - Узнать ID этого чата\n\n' +
+    '<b><i>/mrcount</i></b> - Узнать статистику по МРам\n\n' +
+    '<b><i>/jobs</i></b> - Узнать запланированные уведомления\n\n' +
+    '<b><i>/mrinfo</i></b> - Статистика по невлитым Мрам';
 
   if (
     (ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() ||
@@ -1363,6 +1366,123 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 
 // Обработка добавления пользователя
 bot.on('msg:text', async (ctx) => {
+  // Проверяем, если сообщение является ответом на другое сообщение
+  if (ctx.message?.reply_to_message && !isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
+    // if (ctx.message?.reply_to_message) {
+    const originalMessage = ctx.message.reply_to_message;
+
+    // Проверяем, что цитируется сообщение, отправленное ботом
+    if (!originalMessage.from?.is_bot) return;
+
+    const mrLinks = originalMessage.text.match(
+      new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'),
+    );
+
+    if (!mrLinks || !mrLinks.length) {
+      return;
+    }
+
+    const messageText = ctx.message.text;
+    let usernames = messageText.match(/@\w+/g);
+    if (!usernames || usernames.length === 0) {
+      return;
+    }
+
+    const reviewers = usernames
+      .map((username) => {
+        const user = userList.find((user) => user.messengerNick === username);
+        return user ? user.gitlabName : null;
+      })
+      .filter(Boolean);
+
+    usernames = usernames
+      .map((username) => {
+        const user = userList.find((user) => user.messengerNick === username);
+        return user ? user.messengerNick : null;
+      })
+      .filter(Boolean);
+
+    if (reviewers.length === 0) return;
+
+    const results = [];
+
+    for (const mrUrl of mrLinks) {
+      try {
+        let reviewerIds = [];
+
+        // Получаем GitLab ID для каждого ревьювера
+        for (const reviewer of reviewers) {
+          const response = await axiosInstance.get(`https://${GITLAB_URL}/api/v4/users`, {
+            params: { username: reviewer },
+          });
+
+          if (response.data && response.data.length > 0) {
+            const userId = response.data[0].id;
+            reviewerIds.push(userId);
+          }
+        }
+
+        if (reviewerIds.length === 0) continue;
+
+        // Назначаем ревьюверов на MR
+        const mrIdMatch = mrUrl.match(/\/merge_requests\/(\d+)$/);
+        const projectMatch = mrUrl.match(/\.ru\/(.+?)\/-/);
+
+        if (!mrIdMatch || !projectMatch) continue;
+
+        const mergeRequestIid = mrIdMatch[1];
+        const projectPath = projectMatch[1].replace(/\//g, '%2F');
+        const projectResponse = await axiosInstance.get(`https://${GITLAB_URL}/api/v4/projects/${projectPath}`);
+        const projectId = projectResponse.data.id;
+
+        const getMrUrl = `https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}`;
+
+        // Получаем список всех групп апруверов
+        const { data: mrResponse } = await axiosInstance.get(getMrUrl);
+
+        const activeReviewersIds = [];
+        const authorId = mrResponse.author.id;
+        const authorTelegramName =
+          userList.find((user) => user.gitlabName.toLowerCase() === mrResponse.author.username.toLowerCase())
+            ?.messengerNick || null;
+
+        if (Array.isArray(mrResponse?.reviewers)) {
+          mrResponse?.reviewers.forEach((user) => activeReviewersIds.push(user.id));
+        }
+
+        if (reviewerIds.length === 1 && reviewerIds[0] === authorId) {
+          results.push(`Ревьювер ${usernames[0]} не может быть назначен на свой же МР😉\n${mrUrl}\n`);
+          continue;
+        }
+
+        reviewerIds = reviewerIds.filter((userId) => !activeReviewersIds.includes(userId) && userId !== authorId);
+
+        if (authorTelegramName) {
+          usernames = usernames.filter((user) => user !== authorTelegramName);
+        }
+
+        if (usernames.length === 0) continue;
+
+        if (reviewerIds.length === 0) {
+          results.push(
+            `Ревьювер${usernames.length > 1 ? 'ы' : ''} ${usernames.join(', ')} уже назначен${usernames.length > 1 ? 'ы' : ''} на MR: ${mrUrl}\n`,
+          );
+          continue;
+        }
+
+        await assignGitLabReviewers(projectId, mergeRequestIid, mrUrl, [...activeReviewersIds, ...reviewerIds]);
+        results.push(
+          `Ревьювер${usernames.length > 1 ? 'ы' : ''} ${usernames.join(', ')} добавлен${usernames.length > 1 ? 'ы' : ''} на MR: ${mrUrl}\n`,
+        );
+      } catch (error) {
+        await sendServiceMessage(`Ошибка при добавлении ревьюверов для MR: ${mrUrl}\n`);
+      }
+    }
+    if (results.length > 0) {
+      await ctx.reply(results.join('\n'));
+    }
+  }
+
   // Если скрытая форматированием ссылка
   let urls = [];
   const { text, entities } = ctx.message;
