@@ -660,18 +660,18 @@ const startBot = async (ctx) => {
   }
 };
 
-const simpleChooseReviewers = async (ctx, message, authorNick, countMrs) => {
+const simpleChooseReviewers = async (ctx, message, authorNick, mrLinks) => {
   // Выбор двух случайных ревьюверов
   const availableReviewers = userList
     .filter((user) => user.messengerNick !== authorNick)
     .filter((user) => !isUserExcluded(user.messengerNick));
   const reviewers = getRandomElements(availableReviewers, 2);
   const reviewerMentions = reviewers.map((reviewer) => reviewer.messengerNick).join(' и ');
-  await incrementMrCounter(ctx, countMrs); // Одобавляем + countMrs к счетчику МРов
+  await incrementMrCounter(ctx, mrLinks.length); // Одобавляем + countMrs к счетчику МРов
   const timeMessage = getUserTimeMessage(ctx);
   await ctx.reply(
     getEveningMessage(
-      `Назначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' simpleChooseReviewers ' : ''} ${reviewerMentions}`,
+      `${mrLinks.map((link) => link + '\n\n')}Назначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' simpleChooseReviewers ' : ''} ${reviewerMentions}`,
       timeMessage,
     ),
     {
@@ -1095,7 +1095,7 @@ const assignReviewers = async (ctx, message, authorNick) => {
     return await sendServiceMessage(`${message}\n\nКакая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
   }
 
-  // Пробуем получить ревьюверов через GitLab
+  // // Пробуем получить ревьюверов через GitLab
   const status = await checkMergeRequestByGitlab(ctx, message, authorNick);
 
   if (status) {
@@ -1103,7 +1103,7 @@ const assignReviewers = async (ctx, message, authorNick) => {
   }
 
   // Если нет соединения с GitLab, используем резервный метод
-  await simpleChooseReviewers(ctx, message, authorNick, mrLinks.length);
+  await simpleChooseReviewers(ctx, message, authorNick, mrLinks);
 };
 
 // Показать календарь для выбора даты включения разработчика
