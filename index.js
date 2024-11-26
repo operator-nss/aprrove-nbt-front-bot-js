@@ -15,8 +15,17 @@ import {
   timeZone,
   extractJiraData,
   extractTaskFromBranch,
+  getRandomMessage,
 } from './helpers.js';
-import { calendarOptions, fileChangeMessages, manyMrPhrases, motivationalMessages } from './constants.js';
+import {
+  botComebacks,
+  botReplies,
+  calendarOptions,
+  fileChangeMessages,
+  manyMrPhrases,
+  motivationalMessages,
+  rudeBotPhrases,
+} from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
@@ -1380,8 +1389,21 @@ bot.on('::url').filter(checkMr, async (ctx) => {
   await assignReviewers(ctx, urls, username);
 });
 
-// Обработка добавления пользователя
+// Обработка сообщений
 bot.on('msg:text', async (ctx) => {
+  const messageText = ctx.message.text.toLowerCase();
+  // Если кто-то написал слово БОТ и дразнит бота - показываем смешное сообщение
+  if (messageText.includes('бот') && rudeBotPhrases.some((phrase) => messageText.includes(phrase))) {
+    const randomReply = getRandomMessage(botComebacks);
+    await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
+    return;
+    // Если кто-то написал слово БОТ - показываем смешное сообщение
+  } else if (messageText.includes('бот')) {
+    const randomReply = getRandomMessage(botReplies);
+    await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
+    return;
+  }
+
   // Проверяем, если сообщение является ответом на другое сообщение
   if (ctx.message?.reply_to_message && !isChatNotTeam(ctx, TG_TEAM_CHAT_ID)) {
     // if (ctx.message?.reply_to_message) {
