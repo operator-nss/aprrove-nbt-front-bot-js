@@ -13,11 +13,15 @@ import {
   getRandomPhraseWithCounter,
   getUserTimeMessage,
   timeZone,
+  extractJiraData,
+  extractTaskFromBranch,
 } from './helpers.js';
 import { calendarOptions, fileChangeMessages, manyMrPhrases, motivationalMessages } from './constants.js';
 import axiosInstance from './axiosInstance.js';
 import * as fs from 'fs';
 import path from 'path';
+import jiraInstance from './jiraInstance.js';
+import axios from 'axios';
 
 dotenv.config();
 
@@ -470,16 +474,16 @@ const incrementMrCounter = async (ctx, count = 1) => {
   // Сохранение предыдущего значения счетчика
   const previousCount = mrCounter.daily.count;
 
-  // Проверка, прошли ли через кратное 10
-  const previousMultiple = Math.floor(previousCount / mrMotivationMessageCount);
-  const currentMultiple = Math.floor(mrCounter.daily.count / mrMotivationMessageCount);
-
   // Увеличиваем счетчики
   mrCounter.daily.count += count;
   mrCounter.monthly.count += count;
   mrCounter.yearly.count += count;
 
   await saveMrCounter();
+
+  // Проверка, прошли ли через кратное 10
+  const previousMultiple = Math.floor(previousCount / mrMotivationMessageCount);
+  const currentMultiple = Math.floor(mrCounter.daily.count / mrMotivationMessageCount);
 
   // Отправляем мотивационное сообщение при достижении порога
   if (mrCounter?.daily?.count !== undefined && mrCounter?.daily?.count !== null && currentMultiple > previousMultiple) {
@@ -778,6 +782,25 @@ const updateMergeRequestsStatus = async () => {
   }
 };
 
+export const getJiraPriority = async (sourceBranch, mrUrl) => {
+  if (!sourceBranch) return;
+  try {
+    const issueName = extractTaskFromBranch(sourceBranch);
+    if (!issueName) return;
+    const { data } = await jiraInstance.get(`/rest/api/latest/issue/${issueName}`);
+    const jiraData = extractJiraData(data);
+    if (jiraData) {
+      const { isIssue, priority } = jiraData;
+
+      if (!isIssue) return;
+      return priority;
+    }
+  } catch (err) {
+    await sendServiceMessage(`Ошибка получения статуса в Жире\nMR:${mrUrl}`);
+    return null;
+  }
+};
+
 const assignGitLabReviewers = async (projectId, mergeRequestIid, mrUrl, reviewers) => {
   try {
     await axiosInstance.put(`https://${GITLAB_URL}/api/v4/projects/${projectId}/merge_requests/${mergeRequestIid}`, {
@@ -834,9 +857,13 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           return false;
         }
 
+        const message = await getJiraPriority(mrStatusResponse?.source_branch, mrUrl);
+        if (message) {
+          allAnswers += message;
+        }
+
         const mergeRequestTitle = mrStatusResponse?.title;
         const mergeRequestState = mrStatusResponse?.state;
-        const mergeRequestLabels = mrStatusResponse?.labels;
         const mergeRequestPipelineId = mrStatusResponse?.pipeline?.id;
         const mergeRequestConflicts = mrStatusResponse?.has_conflicts ?? false;
 
@@ -844,17 +871,6 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           ? parseInt(mrStatusResponse?.changes_count, 10)
           : 0;
         const mergeRequestPipelineFailed = mrStatusResponse?.pipeline?.status === 'failed';
-
-        if (mergeRequestLabels.some((label) => label.toLowerCase().includes('блокер'))) {
-          allAnswers += '\n🚨☠Внимание Блокер☠🚨\nПросьба посмотреть оперативно!\n';
-        }
-
-        if (
-          mergeRequestLabels.some((label) => label.toLowerCase().includes('крит')) &&
-          !allAnswers.includes('Внимание Блокер')
-        ) {
-          allAnswers += '\n🚨☠Внимание Крит☠🚨\nПросьба посмотреть оперативно!\n';
-        }
 
         if (!!mergeRequestConflicts) {
           allAnswers += '\n☠В данном Мре КОНФЛИКТЫ. Посмотри в чем проблема!☠\n';
@@ -1742,7 +1758,5 @@ bot.callbackQuery(/.*/, async (ctx) => {
 bot.start({
   onStart: async (ctx) => {
     // await sendMessageToChat(TG_TEAM_CHAT_ID, `А что так можно было?)`);
-    // const {data} = await jiraInstance.get('/rest/api/latest/issue/NBT-29866')
-    //  console.log('data', data)
   },
 });

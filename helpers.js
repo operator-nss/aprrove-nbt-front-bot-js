@@ -1,8 +1,11 @@
 import moment from 'moment-timezone';
+
 moment.locale('ru'); // Устанавливаем локаль на русский
 import { funnyPhrases } from './constants.js';
 import fs from 'fs';
 import path from 'path';
+import jiraInstance from './jiraInstance.js';
+
 export const timeZone = 'Europe/Moscow';
 
 export const checkMr = (ctx) => ctx.message?.text?.toLowerCase()?.includes('merge_requests');
@@ -93,4 +96,30 @@ export const formatDateTime = (date) => {
 
 export const isChatNotTeam = (ctx, teamChatId) => {
   return ctx.chat.id.toString() !== teamChatId.toString();
+};
+
+export const extractTaskFromBranch = (branchName) => {
+  const parts = branchName.split('/');
+  const lastPart = parts[parts.length - 1];
+  // Используем регулярное выражение для извлечения части до цифр
+  const match = lastPart.match(/^\D*\d+/); // Берём только цифры с любым префиксом перед ними
+  return match ? match[0] : null;
+};
+
+const getIssueType = (issuetype) => {
+  if (issuetype === '1') {
+    return '\n🚨☠Внимание Блокер☠🚨\nПросьба посмотреть оперативно!\n';
+  } else if (issuetype === '2') {
+    return '\n🚨☠Внимание Крит☠🚨\nПросьба посмотреть оперативно!\n';
+  } else return null;
+};
+
+export const extractJiraData = (data) => {
+  const jiraData = data?.fields?.parent?.fields;
+  if (!jiraData) return null;
+
+  return {
+    isIssue: jiraData.issuetype?.id === '10004',
+    priority: getIssueType(jiraData.priority?.id),
+  };
 };
