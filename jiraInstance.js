@@ -5,11 +5,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const JIRA_URL = process.env.JIRA_URL;
+const JIRA_TOKEN = process.env.JIRA_TOKEN;
 
 const jiraInstance = axios.create({
   baseURL: JIRA_URL,
   headers: {
-    Authorization: `Bearer Nzg4MDE3OTg2ODc0OqBg4PXpPWAA2LSjNn0nEuw4B91t`,
+    Authorization: `Bearer ${JIRA_TOKEN}`,
     Accept: 'application/json',
   },
 });
