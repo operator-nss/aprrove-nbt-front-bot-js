@@ -16,6 +16,7 @@ import {
   extractJiraData,
   extractTaskFromBranch,
   getRandomMessage,
+  botRegex,
 } from './helpers.js';
 import {
   botComebacks,
@@ -820,6 +821,26 @@ const assignGitLabReviewers = async (projectId, mergeRequestIid, mrUrl, reviewer
   }
 };
 
+async function fetchCodeOwners(PROJECT_ID) {
+  const filePath = '.gitlab%2FCODEOWNERS'; // Кодируем путь до файла
+  const branch = 'main'; // Ветка, в которой находится файл
+
+  const url = `${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/repository/files/${filePath}/raw?ref=${branch}`;
+
+  try {
+    const response = await axios.get(url, {
+      headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN },
+    });
+
+    const content = response.data;
+
+    console.log('CODEOWNERS Content:', content);
+    parseCodeOwners(content); // Парсим содержимое
+  } catch (error) {
+    console.error('Ошибка при получении файла CODEOWNERS:', error.message);
+  }
+}
+
 const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
   const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
 
@@ -1020,7 +1041,40 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
           continue;
         }
 
-        const messengerNickSimpleReviewer = simpleReviewer.messengerNick;
+        let messengerNickSimpleReviewer = simpleReviewer.messengerNick;
+
+        // Проверяем и назначаем код овнера
+        const codeOwnerRule = approvalRulesUrlResponse.find((rule) => rule.rule_type === 'code_owner');
+
+        if (codeOwnerRule && Array.isArray(codeOwnerRule?.eligible_approvers)) {
+          const codeOwners = codeOwnerRule.eligible_approvers.filter((owner) =>
+            userList.some((user) => user.gitlabName === owner.username),
+          );
+
+          if (codeOwners.length) {
+            // фильтруем активных овнеров
+            const activeAssignedCodeOwners = codeOwners.filter((owner) =>
+              activeUsers.some((user) => user.gitlabName === owner.username && user.messengerNick !== authorNick),
+            );
+
+            if (activeAssignedCodeOwners.length) {
+              // проверяем выбран ли уже овнер ревьювером
+              const isCodeOwnerAssigned =
+                activeAssignedCodeOwners.some((owner) => owner.username === selectedLeadNick) ||
+                activeAssignedCodeOwners.some((owner) => owner.username === simpleReviewer.gitlabName);
+
+              // Замена простого ревьювера на активного Code Owner
+              if (!isCodeOwnerAssigned) {
+                const replacementCodeOwner = getRandomElements(activeAssignedCodeOwners, 1); // Берем первого рандомного Code Owner
+                const selectedOwner = activeUsers.find((user) => user.gitlabName === replacementCodeOwner[0].username);
+                messengerNickSimpleReviewer = selectedOwner.messengerNick;
+                selectedCheckMrId = replacementCodeOwner.id;
+              }
+            } else {
+              error += `МР: ${mrUrl}.\nОшибка: требуется аппрув от CodeOwner, но они не работают😭`;
+            }
+          }
+        }
 
         allAnswers += `\n${mrUrl}\nНазначены ревьюверы:${isDevelopmentMode && isChatNotTeam(ctx, TG_TEAM_CHAT_ID) ? ' GITLAB ' : ''} ${messengerNickLead} и ${messengerNickSimpleReviewer}${leadUnavailableMessage}\n`;
 
@@ -1056,7 +1110,9 @@ const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
         success = true; // Устанавливаем флаг успешного выполнения
       }
     } catch (errors) {
-      await sendServiceMessage(`МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab`);
+      await sendServiceMessage(
+        `МР: ${mrUrl}.\nПроизошла ошибка при подключении к API Gitlab\n${isDevelopmentMode && errors}`,
+      );
       return false; // Если произошла ошибка, возвращаем false
     }
   }
@@ -1392,13 +1448,14 @@ bot.on('::url').filter(checkMr, async (ctx) => {
 // Обработка сообщений
 bot.on('msg:text', async (ctx) => {
   const messageText = ctx.message.text.toLowerCase();
+
   // Если кто-то написал слово БОТ и дразнит бота - показываем смешное сообщение
-  if (messageText.includes('бот') && rudeBotPhrases.some((phrase) => messageText.includes(phrase))) {
+  if (botRegex.test(messageText) && rudeBotPhrases.some((phrase) => messageText.includes(phrase))) {
     const randomReply = getRandomMessage(botComebacks);
     await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
     return;
     // Если кто-то написал слово БОТ - показываем смешное сообщение
-  } else if (messageText.includes('бот')) {
+  } else if (botRegex.test(messageText)) {
     const randomReply = getRandomMessage(botReplies);
     await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
     return;

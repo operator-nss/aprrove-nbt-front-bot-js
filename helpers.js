@@ -123,3 +123,6 @@ export const extractJiraData = (data) => {
     priority: getIssueType(jiraData.priority?.id),
   };
 };
+
+// Проверяет, что "бот" является отдельным словом с границами слова (пробелы, знаки препинания, начало или конец строки).
+export const botRegex = /\bбот\b|бот(?=\s|$)|(?<=\s|^)бот/i;
