@@ -456,6 +456,7 @@ const resetMrCounterIfNeeded = async (ctx = undefined) => {
         name: jobName,
         includeDate: date.format('YYYY-MM-DD HH:mm'),
       });
+      await saveScheduledJobs();
     }
     await updateMergeRequestsStatus();
   }
