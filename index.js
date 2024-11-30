@@ -842,9 +842,7 @@ async function fetchCodeOwners(PROJECT_ID) {
   }
 }
 
-const checkMergeRequestByGitlab = async (ctx, message, authorNick) => {
-  const mrLinks = message.match(new RegExp(`https?:\/\/${GITLAB_URL}\/[\\w\\d\\-\\._~:\\/?#\\[\\]@!$&'()*+,;=]+`, 'g'));
-
+const checkMergeRequestByGitlab = async (ctx, mrLinks, authorNick) => {
   if (!mrLinks || !mrLinks.length) {
     return false; // Возвращаем false, если нет ссылок MR
   }
@@ -1177,8 +1175,13 @@ const assignReviewers = async (ctx, message, authorNick) => {
     return await sendServiceMessage(`${message}\n\nКакая-то проблема с сылкой на МР. Просьба посмотреть!😊`);
   }
 
+  // Если уже назначались ревьюверы - то не делаем это повторно
+  const filteredMrLinks = mrLinks.filter((link) => mergeRequests.some((url) => url === link));
+
+  if (!filteredMrLinks.length) return;
+
   // // Пробуем получить ревьюверов через GitLab
-  const status = await checkMergeRequestByGitlab(ctx, message, authorNick);
+  const status = await checkMergeRequestByGitlab(ctx, filteredMrLinks, authorNick);
 
   if (status) {
     return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
