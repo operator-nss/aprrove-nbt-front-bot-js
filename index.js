@@ -843,12 +843,7 @@ async function fetchCodeOwners(PROJECT_ID) {
 }
 
 const checkMergeRequestByGitlab = async (ctx, mrLinks, authorNick) => {
-  if (!mrLinks || !mrLinks.length) {
-    return false; // Возвращаем false, если нет ссылок MR
-  }
-
   let mrsCount = 0;
-
   let allAnswers = ''; // Собираем все невалидные сообщения для всех МРов
   let error = ''; // Собираем ошибки
   let success = false; // Флаг успешного выполнения
