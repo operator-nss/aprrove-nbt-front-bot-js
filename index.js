@@ -14,7 +14,7 @@ import {
   getUserTimeMessage,
   timeZone,
   extractJiraData,
-  extractTaskFromBranch,
+  extractTaskFromTitle,
   getRandomMessage,
   botRegex,
 } from './helpers.js';
@@ -34,6 +34,8 @@ import jiraInstance from './jiraInstance.js';
 import axios from 'axios';
 
 dotenv.config();
+
+const DB_PATH = process.env.DB_PATH;
 
 const TOKEN = process.env.BOT_API_KEY; // Токен телеграмм-бота
 const ADMINS_IDS = process.env.ADMINS; // GitLab Access Token
@@ -170,7 +172,7 @@ export const sendMessageToChat = async (chatId, message) => {
 
 const saveMergeRequests = async (mergeRequests) => {
   try {
-    fs.writeFileSync(path.resolve('bd/mergeRequests.json'), JSON.stringify(mergeRequests, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'mergeRequests.json'), JSON.stringify(mergeRequests, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении МР в файл');
   }
@@ -178,7 +180,7 @@ const saveMergeRequests = async (mergeRequests) => {
 
 const loadMergeRequests = async () => {
   try {
-    const data = fs.readFileSync(path.resolve('bd/mergeRequests.json'));
+    const data = fs.readFileSync(path.resolve(DB_PATH, 'mergeRequests.json'));
     mergeRequests = JSON.parse(data);
   } catch (error) {
     console.error('Ошибка при загрузке МР из файла:', error);
@@ -196,7 +198,7 @@ const saveScheduledJobs = async () => {
     };
   });
   try {
-    fs.writeFileSync(path.resolve('bd/scheduledJobs.json'), JSON.stringify(jobData, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'scheduledJobs.json'), JSON.stringify(jobData, null, 2));
   } catch (err) {
     await sendServiceMessage('Ошибка сохранения задач планировщика в файл');
   }
@@ -204,7 +206,7 @@ const saveScheduledJobs = async () => {
 
 const loadScheduledJobs = async () => {
   try {
-    const jobData = JSON.parse(fs.readFileSync(path.resolve('bd/scheduledJobs.json')));
+    const jobData = JSON.parse(fs.readFileSync(path.resolve(DB_PATH, 'scheduledJobs.json')));
 
     jobData.forEach(({ name, nextInvocation }) => {
       const [username, taskType, datePart] = name.split('__');
@@ -374,7 +376,7 @@ const showScheduledJobs = async (ctx) => {
 
 const loadDevelopmentMode = async () => {
   try {
-    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/developmentMode.json')));
+    const data = await JSON.parse(fs.readFileSync(path.resolve(DB_PATH, 'developmentMode.json')));
     isDevelopmentMode = data.isDevelopmentMode || false;
   } catch (error) {
     await sendServiceMessage('Ошибка при загрузке состояния режима разработки');
@@ -386,7 +388,7 @@ const saveDevelopmentMode = async () => {
     const data = {
       isDevelopmentMode,
     };
-    fs.writeFileSync(path.resolve('bd/developmentMode.json'), JSON.stringify(data, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'developmentMode.json'), JSON.stringify(data, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении состояния режима разработки');
   }
@@ -394,7 +396,7 @@ const saveDevelopmentMode = async () => {
 
 const loadMrCounter = async () => {
   try {
-    const data = await JSON.parse(fs.readFileSync(path.resolve('bd/mrCounter.json')));
+    const data = await JSON.parse(fs.readFileSync(path.resolve(DB_PATH, 'mrCounter.json')));
     mrCounter = data;
   } catch (error) {
     mrCounter = {
@@ -409,7 +411,7 @@ const loadMrCounter = async () => {
 
 const saveMrCounter = async () => {
   try {
-    fs.writeFileSync(path.resolve('bd/mrCounter.json'), JSON.stringify(mrCounter, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'mrCounter.json'), JSON.stringify(mrCounter, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении счетчика MR');
   }
@@ -513,7 +515,7 @@ const sendMotivationalMessage = async (ctx) => {
 
 const loadUserList = async () => {
   try {
-    const data = await fs.readFileSync(path.resolve('bd/userList.json'));
+    const data = await fs.readFileSync(path.resolve(DB_PATH, 'userList.json'));
     userList = JSON.parse(data);
   } catch (error) {
     await sendServiceMessage('Ошибка чтения всех разработчиков из файла');
@@ -522,7 +524,7 @@ const loadUserList = async () => {
 
 const loadExcludedUsers = async () => {
   try {
-    const data = await fs.readFileSync(path.resolve('bd/excludedUsers.json'));
+    const data = await fs.readFileSync(path.resolve(DB_PATH, 'excludedUsers.json'));
     excludedUsers = JSON.parse(data);
     // Планируем задачи при загрузке
     excludedUsers.forEach((user) => {
@@ -536,7 +538,7 @@ const loadExcludedUsers = async () => {
 // Сохранение userList в JSON файл
 const saveUserList = async () => {
   try {
-    fs.writeFileSync(path.resolve('bd/userList.json'), JSON.stringify(userList, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'userList.json'), JSON.stringify(userList, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении разработчика в файл');
   }
@@ -545,7 +547,7 @@ const saveUserList = async () => {
 // Сохранение excludedUsers в JSON файл
 const saveExcludedUsers = async () => {
   try {
-    fs.writeFileSync(path.resolve('bd/excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'excludedUsers.json'), JSON.stringify(excludedUsers, null, 2));
   } catch (error) {
     await sendServiceMessage('Ошибка при сохранении исключенного разработчика в файл');
   }
@@ -562,7 +564,7 @@ const getUserExclusionIndex = (username) => {
 // Загрузка предлодений из файла
 const loadSuggestions = async () => {
   try {
-    const data = fs.readFileSync(path.resolve('bd/suggestions.json'));
+    const data = fs.readFileSync(path.resolve(DB_PATH, 'suggestions.json'));
     suggestions = JSON.parse(data);
   } catch (error) {
     await sendServiceMessage('Ошибка чтения предложений из файла');
@@ -793,10 +795,10 @@ const updateMergeRequestsStatus = async () => {
   }
 };
 
-export const getJiraPriority = async (sourceBranch, mrUrl) => {
-  if (!sourceBranch) return;
+export const getJiraPriority = async (title, mrUrl) => {
+  if (!title) return;
   try {
-    const issueName = extractTaskFromBranch(sourceBranch);
+    const issueName = extractTaskFromTitle(title);
     if (!issueName) return;
     const { data } = await jiraInstance.get(`/rest/api/latest/issue/${issueName}`);
     const jiraData = extractJiraData(data);
@@ -807,7 +809,7 @@ export const getJiraPriority = async (sourceBranch, mrUrl) => {
       return priority;
     }
   } catch (err) {
-    await sendServiceMessage(`Ошибка получения статуса в Жире\nMR:${mrUrl}`);
+    await sendServiceMessage(`Ошибка получения статуса в Жире\nMR:${mrUrl}\nТекст ошибки: ${err}`);
     return null;
   }
 };
@@ -821,26 +823,6 @@ const assignGitLabReviewers = async (projectId, mergeRequestIid, mrUrl, reviewer
     await sendServiceMessage(`Ошибка при редактировании МРа(бот не смог в гитлабе назначить ревьюверов).\nMR:${mrUrl}`);
   }
 };
-
-async function fetchCodeOwners(PROJECT_ID) {
-  const filePath = '.gitlab%2FCODEOWNERS'; // Кодируем путь до файла
-  const branch = 'main'; // Ветка, в которой находится файл
-
-  const url = `${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/repository/files/${filePath}/raw?ref=${branch}`;
-
-  try {
-    const response = await axios.get(url, {
-      headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN },
-    });
-
-    const content = response.data;
-
-    console.log('CODEOWNERS Content:', content);
-    parseCodeOwners(content); // Парсим содержимое
-  } catch (error) {
-    console.error('Ошибка при получении файла CODEOWNERS:', error.message);
-  }
-}
 
 const checkMergeRequestByGitlab = async (ctx, mrLinks, authorNick) => {
   let mrsCount = 0;
@@ -881,7 +863,7 @@ const checkMergeRequestByGitlab = async (ctx, mrLinks, authorNick) => {
           return false;
         }
 
-        const message = await getJiraPriority(mrStatusResponse?.source_branch, mrUrl);
+        const message = await getJiraPriority(mrStatusResponse?.title, mrUrl);
         if (message) {
           allAnswers += message;
         }
@@ -1171,12 +1153,15 @@ const assignReviewers = async (ctx, message, authorNick) => {
   }
 
   // Если уже назначались ревьюверы - то не делаем это повторно
-  const filteredMrLinks = mrLinks.filter((link) => mergeRequests.some((url) => url === link));
+  const filteredMrLinks = mrLinks.filter((link) => !mergeRequests.some((mergeRequest) => mergeRequest.url === link));
 
-  if (!filteredMrLinks.length) return;
+  if (!filteredMrLinks.length && !isDevelopmentMode) return;
+
+  // Используем либо filteredMrLinks, либо mrLinks в зависимости от режима разработки
+  const linksToProcess = isDevelopmentMode ? mrLinks : filteredMrLinks;
 
   // // Пробуем получить ревьюверов через GitLab
-  const status = await checkMergeRequestByGitlab(ctx, filteredMrLinks, authorNick);
+  const status = await checkMergeRequestByGitlab(ctx, linksToProcess, authorNick);
 
   if (status) {
     return; // Если удалось получить ревьюверов через GitLab, прерываем выполнение функции
@@ -1317,19 +1302,20 @@ const showUserList = async (ctx, action) => {
 // Обработка команды /help
 const helpCommand = async (ctx) => {
   let helpText =
-    '/start - Запустить бота\n' +
-    '/help - Показать это сообщение\n\n' +
+    '<b><i>/start</i></b> - Запустить бота\n\n' +
+    '<b><i>/help</i></b> - Показать это сообщение\n\n' +
+    '<b><i>/chatid</i></b> - Узнать ID этого чата\n\n' +
+    '<b><i>/mrcount</i></b> - Узнать статистику по МРам\n\n' +
+    '<b><i>/jobs</i></b> - Узнать запланированные уведомления\n\n' +
+    '<b><i>/mrinfo</i></b> - Статистика по невлитым Мрам\n\n' +
+    '<b><i>/all + текст сообщения</i></b> - Отправить сообщение всем активным разработчикам\n\n' +
     '<b><i>Добавить разработчика</i></b> - Добавить разработчика в список сотрудников\n\n' +
     '<b><i>Удалить разработчика</i></b> - Удалить разработчика из списка сотрудников (например, удалить уволенного сотрудника)\n\n' +
     '<b><i>Исключить разработчика</i></b> - Сделать разработчика временно неактивным (например, разработчик в отпуске или на больничном)\n\n' +
     '<b><i>Включить разработчика</i></b> - Вернуть временно неактивного разработчика в список сотрудников\n\n' +
     '<b><i>Показать разработчиков</i></b> - Отобразить текущий список всех разработчиков, в том числе и неактивных разработчиков. Ревьюверы выбираются только из списка активных сотрудников\n\n' +
     '<b><i>Проверить чаты</i></b> - Проверка чатов на доступность(как-то раз слетел ID одного чата)\n\n' +
-    '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования)\n\n' +
-    '<b><i>/chatid</i></b> - Узнать ID этого чата\n\n' +
-    '<b><i>/mrcount</i></b> - Узнать статистику по МРам\n\n' +
-    '<b><i>/jobs</i></b> - Узнать запланированные уведомления\n\n' +
-    '<b><i>/mrinfo</i></b> - Статистика по невлитым Мрам';
+    '<b><i>Включить логирование</i></b> - Доступно только если писать боту в личку. Включает отображение логов подключения к гитлабу(для тестирования)';
 
   if (
     (ctx.chat.id.toString() === SERVICE_CHAT_ID.toString() ||
@@ -1449,12 +1435,16 @@ bot.on('msg:text', async (ctx) => {
   const messageText = ctx.message.text.toLowerCase();
 
   // Если кто-то написал слово БОТ и дразнит бота - показываем смешное сообщение
-  if (botRegex.test(messageText) && rudeBotPhrases.some((phrase) => messageText.includes(phrase))) {
+  if (
+    botRegex.test(messageText) &&
+    rudeBotPhrases.some((phrase) => messageText.includes(phrase)) &&
+    ctx.chat.id?.toString() !== SERVICE_CHAT_ID
+  ) {
     const randomReply = getRandomMessage(botComebacks);
     await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
     return;
     // Если кто-то написал слово БОТ - показываем смешное сообщение
-  } else if (botRegex.test(messageText)) {
+  } else if (botRegex.test(messageText) && ctx.chat.id?.toString() !== SERVICE_CHAT_ID) {
     const randomReply = getRandomMessage(botReplies);
     await ctx.reply(randomReply, { reply_to_message_id: ctx.message.message_id });
     return;
@@ -1610,7 +1600,7 @@ bot.on('msg:text', async (ctx) => {
       timestamp: new Date().toISOString(),
     });
 
-    fs.writeFileSync(path.resolve('bd/suggestions.json'), JSON.stringify(suggestions, null, 2));
+    fs.writeFileSync(path.resolve(DB_PATH, 'suggestions.json'), JSON.stringify(suggestions, null, 2));
 
     await ctx.reply('Спасибо! Ваши пожелания переданы!😘');
     session.awaitingSuggestionsInput = false;

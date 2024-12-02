@@ -98,11 +98,9 @@ export const isChatNotTeam = (ctx, teamChatId) => {
   return ctx.chat.id.toString() !== teamChatId.toString();
 };
 
-export const extractTaskFromBranch = (branchName) => {
-  const parts = branchName.split('/');
-  const lastPart = parts[parts.length - 1];
-  // Используем регулярное выражение для извлечения части до цифр
-  const match = lastPart.match(/^\D*\d+/); // Берём только цифры с любым префиксом перед ними
+export const extractTaskFromTitle = (title) => {
+  // Используем регулярное выражение для извлечения начальных букв + цифр после "-"
+  const match = title.match(/[A-Z]+-\d+/i); // [A-Z]+ для букв до "-", \d+ для цифр после
   return match ? match[0] : null;
 };
 
